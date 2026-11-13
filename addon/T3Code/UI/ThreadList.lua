@@ -89,6 +89,12 @@ local function CreateRow(button)
 		GameTooltip:AddLine(ns.Store:ProjectName(t.p), 0.7, 0.7, 0.7)
 		GameTooltip:AddLine(t.l or ns.Store.StatusText(t.s), 1, 1, 1, true)
 		if t.br then GameTooltip:AddLine("Branch: " .. t.br, 0.6, 0.8, 1) end
+		local pr = ns.Store.PRText(t.pr)
+		if pr then
+			local detail = (t.pr.f and t.pr.t) and string.format("  (%d of %d checks failed)", t.pr.f, t.pr.t) or ""
+			GameTooltip:AddLine(pr .. ns.Color("grey", detail))
+		end
+		if t.iss then GameTooltip:AddLine("Issue: " .. t.iss, 0.6, 0.8, 1) end
 		if t.m then
 			local label = t.mi and ns.Store:ModelLabel(ns.Store.EnvOf(t.id), ns.Store.ModelKey(t.mi, t.m)) or t.m
 			GameTooltip:AddLine(label, 0.6, 0.6, 0.6)
@@ -119,7 +125,12 @@ local function InitRow(button, ed)
 	if color then button.Dot:SetVertexColor(color[1], color[2], color[3]) end
 	button.Status:SetText(ns.Color(ns.Store.StatusColor(t.s), ns.Store.StatusText(t.s)))
 	local sub = ns.Store:ProjectName(t.p)
-	if t.s == "working" or t.s == "input" or t.s == "waiting" then sub = t.l or sub end
+	if t.s == "working" or t.s == "input" or t.s == "waiting" then
+		sub = t.l or sub
+	elseif t.pr then
+		-- A finished agent's pull request matters more than its workspace's name.
+		sub = ns.Store.PRText(t.pr)
+	end
 	button.Sub:SetText(sub)
 	if (t.s == "working" or t.s == "waiting") and t.st then
 		button.Age:SetText(ns.Duration(time() - t.st))
@@ -190,7 +201,7 @@ function L:Create(parent)
 end
 
 function L:SetupDropdown()
-	local options = { { value = "all", label = "All projects" } }
+	local options = { { value = "all", label = "All workspaces" } }
 	-- With more than one machine, filters per machine come first.
 	local machines = ns.Store.data.bridge and ns.Store.data.bridge.envs
 	if machines then
@@ -242,7 +253,7 @@ function L:Refresh(force)
 	if ns.Store.applied == 0 then
 		dp:Insert({ empty = "Waiting for the bridge…" })
 	elseif (ns.Store.data.older or 0) > 0 and not s.collapsed.settled then
-		dp:Insert({ empty = string.format("+%d older settled threads in T3 Code", ns.Store.data.older) })
+		dp:Insert({ empty = string.format("+%d older settled agents in Orca", ns.Store.data.older) })
 	end
 	self.scrollBox:SetDataProvider(dp, ScrollBoxConstants.RetainScrollPosition)
 	ns:Fire("ListRebuilt")

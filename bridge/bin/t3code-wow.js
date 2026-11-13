@@ -12,6 +12,7 @@ import { findWowInstalls, addonsDir as addonsDirOf, findWowProcess } from '../sr
 import { SlotBank, ADDON, CTL_LONG } from '../src/slots.js';
 import { StripCapture, SCREEN_PERMISSION_HELP } from '../src/capture.js';
 import { decodeImage } from '../src/codec.js';
+import { findOrcaCli } from '../src/orca.js';
 import { identify, discoverTailscale, mintRemote, revokeRemote, saveToken, readTokenData, tokenFile } from '../src/envs.js';
 import { logonTask, supervise, stopWhenGone } from '../src/windows-service.js';
 
@@ -244,18 +245,29 @@ async function cmdInstall(args) {
   const next = { ...rest, wowDir, addonsDir, slots };
   writeConfig(next);
 
-  if (!findT3Cli()) {
-    console.log(C.r('✗ The `t3` command was not found. Open T3 Code once (it installs `t3`), then run `t3code-wow install` again.'));
-    process.exitCode = 1;
-    return;
+  if (next.backend === 't3') {
+    if (!findT3Cli()) {
+      console.log(C.r('✗ The `t3` command was not found. Open T3 Code once (it installs `t3`), then run `t3code-wow install` again.'));
+      process.exitCode = 1;
+      return;
+    }
+    const token = readToken();
+    const claims = token && tokenClaims(token);
+    if (!claims || (claims.exp && claims.exp < Date.now() + 86400000)) {
+      process.stdout.write('… Creating a T3 Code session for the bridge (this takes a few seconds)\r');
+      await mintToken();
+    }
+    console.log(`${C.g('✓')} T3 Code session ready ${C.d('(scoped to reading and running threads; revoke with `t3 auth session list`)')}`);
+  } else {
+    // This fork watches Orca: it needs only Orca's own CLI, which needs no session.
+    const cli = findOrcaCli();
+    if (!cli) {
+      console.log(C.r('✗ The `orca` command was not found. Install Orca, or set ORCA_CLI to its path, then run `t3code-wow install` again.'));
+      process.exitCode = 1;
+      return;
+    }
+    console.log(`${C.g('✓')} Watching Orca ${C.d(`(${cli})`)}`);
   }
-  const token = readToken();
-  const claims = token && tokenClaims(token);
-  if (!claims || (claims.exp && claims.exp < Date.now() + 86400000)) {
-    process.stdout.write('… Creating a T3 Code session for the bridge (this takes a few seconds)\r');
-    await mintToken();
-  }
-  console.log(`${C.g('✓')} T3 Code session ready ${C.d('(scoped to reading and running threads; revoke with `t3 auth session list`)')}`);
 
   if (!args['no-service']) {
     if (!service.install()) {
@@ -332,9 +344,9 @@ async function firstLaunch({ restart, running, waiting, since }) {
   }
   console.log(`
 ${C.b('In game')}
-  /t3                       open or close T3 Code (or click the T3 button on the minimap)
+  /orca                     open or close Orca (or click the Orca button on the minimap)
   both triggers + Back      open it from a controller
-  /t3 selftest              check the link step by step if something seems off
+  /orca selftest            check the link step by step if something seems off
 
 ${C.b('From here')}
   t3code-wow env add <host>   show threads from another machine (T3 Connect)
@@ -390,14 +402,15 @@ function cmdStatus(args) {
   const alive = age < 10000;
   const ok = (b) => (b ? C.g('●') : C.r('●'));
   console.log(`${ok(alive)} Bridge ${st.version} ${alive ? `running (pid ${st.pid})` : `not running (last seen ${ago(age)})`}`);
-  console.log(`${ok(st.t3.state === 'connected')} T3 Code: ${st.t3.state}${st.t3.error ? ` — ${st.t3.error}` : ''} ${C.d(`(${st.t3.threads} threads, ${st.t3.origin || '?'})`)}`);
+  const orca = readConfig().backend !== 't3';
+  console.log(`${ok(st.t3.state === 'connected')} ${orca ? 'Orca' : 'T3 Code'}: ${st.t3.state}${st.t3.error ? ` — ${st.t3.error}` : ''} ${C.d(orca ? `(${st.t3.threads} agents)` : `(${st.t3.threads} threads, ${st.t3.origin || '?'})`)}`);
   console.log(`${ok(!!st.wow)} WoW: ${st.wow ? `running (pid ${st.wow.pid})` : 'not running'}`);
   console.log(`${ok(st.capture.state === 'ok' || st.capture.state === 'idle')} Screen link: ${st.capture.state} via ${st.capture.backend} ${C.d(`(${st.capture.decoded} frames read, ${st.capture.rejected} rejected)`)}${st.capture.lastError ? `\n    ${C.y(st.capture.lastError)}` : ''}`);
   if (st.addon) {
     console.log(`${ok(true)} Addon ${st.addon.version}: last heard ${ago(Date.now() - st.addon.lastSeen)}; window ${st.addon.flags.includes('o') ? 'open' : 'closed'}`);
     console.log(`${ok(st.addon.encrypted)} Link ${st.addon.encrypted ? 'encrypted' : 'not encrypted yet (waiting for the addon to load its keys)'}${st.rejected?.forged ? C.d(` · ${st.rejected.forged} unauthenticated frames ignored`) : ''}`);
   } else {
-    console.log(`${ok(false)} Addon: not heard from yet ${C.d('(log in, then /t3)')}`);
+    console.log(`${ok(false)} Addon: not heard from yet ${C.d('(log in, then /orca)')}`);
   }
   console.log(`  Live updates left this session: ${st.slots.remaining}/${st.slots.total} ${C.d(`· ${st.publishes} updates sent · update bell #${st.signals.next}`)}`);
   console.log(`  Speech: ${st.voice.tts || C.y('none')} · Dictation: ${st.voice.dictation || C.y('none')}`);
@@ -406,6 +419,19 @@ function cmdStatus(args) {
     console.log('');
     for (const l of st.log) console.log(C.d(l));
   }
+}
+
+// A screenshot of the game window, for the WoW Assistant to look at: prints its path.
+async function cmdScreenshot(args) {
+  const proc = await findWowProcess();
+  if (!proc) throw new Error('World of Warcraft is not running, so there is nothing to screenshot.');
+  const image = await new StripCapture({}).screenshot(proc.pid);
+  const dir = path.join(STATE_DIR, 'shots');
+  fs.mkdirSync(dir, { recursive: true });
+  const ext = image.mime === 'image/jpeg' ? '.jpg' : '.png';
+  const out = args.out ? path.resolve(String(args.out)) : path.join(dir, `game-${new Date().toISOString().replace(/[:.]/g, '-')}${ext}`);
+  fs.writeFileSync(out, image.data);
+  console.log(out);
 }
 
 async function cmdProbe() {
@@ -640,6 +666,7 @@ function help() {
   t3code-wow env remove <name>
                      Stop showing a machine and revoke the bridge's session there
   t3code-wow probe       Capture the corner of the game window and try to read the strip
+  t3code-wow screenshot  Save a screenshot of the game window and print its path (--out <file>)
   t3code-wow uninstall [--yes]
                      Remove the addon, its settings, the service, the bridge's
                      T3 Code sessions and its files`);
@@ -647,7 +674,7 @@ function help() {
 
 const args = parseArgs(process.argv.slice(2));
 const cmd = args._[0];
-const commands = { env: cmdEnv, install: cmdInstall, run: cmdRun, status: cmdStatus, sync: cmdSync, probe: cmdProbe, uninstall: cmdUninstall, supervise: cmdSupervise };
+const commands = { env: cmdEnv, install: cmdInstall, run: cmdRun, status: cmdStatus, sync: cmdSync, probe: cmdProbe, screenshot: cmdScreenshot, uninstall: cmdUninstall, supervise: cmdSupervise };
 if (!cmd || args.help || !commands[cmd]) {
   help();
   if (cmd && !commands[cmd]) process.exitCode = 1;

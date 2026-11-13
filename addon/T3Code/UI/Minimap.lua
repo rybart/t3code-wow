@@ -98,14 +98,14 @@ function B:Create()
 end
 
 function B:Tooltip(tip)
-	tip:SetText("T3 Code", 1, 0.82, 0)
+	tip:SetText("Orca", 1, 0.82, 0)
 	local working, needsYou, waiting = 0, 0, 0
 	for _, t in ipairs(ns.Store:Active()) do
 		if t.s == "working" then working = working + 1
 		elseif t.s == "waiting" then waiting = waiting + 1
 		else needsYou = needsYou + 1 end
 	end
-	if needsYou > 0 then tip:AddLine(needsYou .. (needsYou == 1 and " thread needs you" or " threads need you"), 1, 0.6, 0.2) end
+	if needsYou > 0 then tip:AddLine(needsYou .. (needsYou == 1 and " agent needs you" or " agents need you"), 1, 0.6, 0.2) end
 	if working > 0 then tip:AddLine(working .. " working", 0.4, 0.7, 1) end
 	if waiting > 0 then tip:AddLine(waiting .. " waiting", 0.6, 0.6, 0.6) end
 	if working + needsYou + waiting == 0 then tip:AddLine("Nothing running", 1, 1, 1) end

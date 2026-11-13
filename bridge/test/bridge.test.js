@@ -34,7 +34,7 @@ function tempAddons(slots = 8) {
 
 function fakeBridge(slots = 8, config = {}) {
   const dir = tempAddons(slots);
-  const b = new Bridge({ addonsDir: dir, config: { slots, ...config }, log: () => {}, stateDir: fs.mkdtempSync(path.join(os.tmpdir(), 't3wow-state-')) });
+  const b = new Bridge({ addonsDir: dir, config: { slots, backend: 't3', ...config }, log: () => {}, stateDir: fs.mkdtempSync(path.join(os.tmpdir(), 't3wow-state-')) });
   b.proc = { pid: 1, startTicks: 1 };
   currentKeys = b.stripKeys;
   b.persist = { processKey: '1:1', sigCounter: 1, raised: [], handled: {}, slotGuess: 1, gen: 0 };
@@ -501,7 +501,7 @@ test('a command run just before the bridge stops is not run again by the next br
   const strip = frame(1, [['H', 1, 'sess', 'ui1', 1, 1, 0, 'o', '', '0.1.0'], ['C', 1, 'send', 't1', 'hello']]);
   b.onFrame(strip);
   b.stop();
-  const next = new Bridge({ addonsDir: dir, config: { slots: 8 }, log: () => {}, stateDir: b.stateDir });
+  const next = new Bridge({ addonsDir: dir, config: { slots: 8, backend: 't3' }, log: () => {}, stateDir: b.stateDir });
   next.proc = b.proc;
   next.t3.sendMessage = async (...a) => calls.push(['sent again', ...a]);
   next.onFrame(strip);

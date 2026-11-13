@@ -118,7 +118,7 @@ function F:Create(right, header)
 	kids.listAlignRight = true
 	kids.Update = function(self) self.value = nil end
 	kids.onChange = function(id) F:Open(id, "up") end
-	UI.Tooltip(kids, function(self) return self:GetText() end, "Threads this one started. Pick one to open it.")
+	UI.Tooltip(kids, function(self) return self:GetText() end, "Agents this one started. Pick one to open it.")
 	bar.Kids = kids
 
 	self.bar = bar
@@ -173,7 +173,7 @@ function F:Refresh()
 		if up.id then
 			b.Text:SetText(ns.Color("gold", lead) .. " " .. up.t)
 			b.Status:SetText(StatusWord(up.s))
-			b.tip = "Open the thread this one came from."
+			b.tip = "Open the agent this one came from."
 		else
 			b.Text:SetText(ns.Color("grey", lead .. " " .. up.t))
 			b.Status:SetText("")

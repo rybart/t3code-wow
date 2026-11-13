@@ -18,6 +18,9 @@ import { StripCapture } from './capture.js';
 import { SlotBank, replaceFile, FileInUse } from './slots.js';
 import { threadStatus, isUnread, effortOf, waitingOn, isRunning } from './t3.js';
 import { Fleet } from './fleet.js';
+import { OrcaClient } from './orca.js';
+import { Assistant, ASSISTANT_NAME } from './assistant.js';
+import { fileURLToPath } from 'node:url';
 import { threadFamily } from './family.js';
 import { tokenProvider } from './auth.js';
 import { snoozeChoices, snoozedUntil, parseCustomSnooze, describeWhen } from './snooze.js';
@@ -29,6 +32,8 @@ import { loadOrCreateKey, deriveKeys, open as openSealed, ENCRYPTED_VERSION } fr
 
 export const VERSION = '0.5.0';
 export const STATE_DIR = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local/state'), 't3code-wow');
+const DATA_DIR = path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local/share'), 't3code-wow');
+const CLI = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'bin', 't3code-wow.js');
 
 const sec = (iso) => (iso ? Math.floor(Date.parse(iso) / 1000) : undefined);
 
@@ -321,12 +326,27 @@ export class Bridge {
     this.capture = new StripCapture({ log: this.log, backend: config.capture?.backend || 'auto', region: config.capture?.region || null });
     this.tokens = tokenProvider({ log: this.log });
     // Every T3 Code machine we show: this one, plus any added with `t3code-wow env add`.
-    this.t3 = new Fleet({ localTokens: this.tokens, environments: config.environments || [], log: this.log });
+    // This fork watches Orca by default; `"backend": "t3"` in the config goes back to T3 Code.
+    this.backend = config.backend === 't3' ? 't3' : 'orca';
+    const localClient = this.backend === 'orca' ? new OrcaClient({ log: this.log }) : null;
+    this.t3 = new Fleet({ localTokens: this.tokens, localClient, environments: config.environments || [], log: this.log });
     this.voice = new Voice({ ttsCommand: config.tts?.command || null, rate: config.tts?.rate || 0, log: this.log });
     this.stateDir = stateDir;
     this.stateFile = path.join(stateDir, 'state.json');
     this.statusFile = path.join(stateDir, 'status.json');
     this.persist = this.loadState();
+    // The WoW Assistant: an Orca chat that answers questions about the game.
+    this.assistant = localClient
+      ? new Assistant({
+          orca: localClient,
+          dir: config.assistant?.dir || path.join(DATA_DIR, ASSISTANT_NAME),
+          wowDir: config.wowDir,
+          screenshotCmd: `"${process.execPath}" "${CLI}" screenshot`,
+          persist: this.persist,
+          save: () => this.saveState(),
+          log: this.log,
+        })
+      : null;
     // Keys for the encrypted strip; the addon gets them in every snapshot.
     this.stripKeys = deriveKeys(loadOrCreateKey(stateDir));
     this.rejected = { forged: 0, plainCommands: 0, loggedAt: 0 };
@@ -379,7 +399,8 @@ export class Bridge {
     const v = this.voice.describe();
     this.log(`speech: ${v.tts || 'none'}; dictation: ${v.dictation || 'none'}; capture: ${this.capture.resolveBackend()}`);
     this.t3.on('state', (s, e) => {
-      this.log(`T3: ${s}${e ? ` (${e})` : ''}`);
+      this.log(`${this.backend === 'orca' ? 'Orca' : 'T3'}: ${s}${e ? ` (${e})` : ''}`);
+      if (s === 'connected' && this.assistant) this.assistant.prepare().catch((err) => this.log(`assistant workspace: ${err.message}`));
       this.omarchyUsage.refresh(this.usageInstances());
       this.markDirty('important');
     });
@@ -604,8 +625,19 @@ export class Bridge {
           if (effort) opts.effort = effort;
           if (worktree === '1') opts.worktree = true;
           const res = await this.t3.launchThread(a0, a1, attachments, opts);
-          msg = 'Thread started';
+          msg = this.backend === 'orca' ? 'Agent started' : 'Thread started';
           if (res?.threadId) this.results.push({ id: cmd.id, ok: true, open: res.threadId });
+          break;
+        }
+        case 'assistant': {
+          // assistant [<text>]: open the WoW Assistant, starting its chat (on <text>, with
+          // any screenshots attached for a new thread) when there isn't one.
+          if (!this.assistant) throw new Error('The assistant needs the bridge to be watching Orca.');
+          const attachments = this.assistant.threadId() ? [] : await this.takeShots('new', 'new');
+          const id = await this.assistant.open(a0 || '', attachments);
+          msg = a0 ? 'Asked the assistant' : null;
+          this.results.push({ id: cmd.id, ok: true, open: id });
+          if (!msg) ok = null;
           break;
         }
         case 'model':
@@ -926,7 +958,13 @@ export class Bridge {
     threads = threads.filter(({ s }) => s !== 'settled' || ++settled <= 30).slice(0, 90);
     const list = threads.map(({ t, s }) => {
       usedProjects.add(t.projectId);
-      return threadRow(t, s, this.views.get(t.id)?.projection, this.busyKids(t));
+      const row = threadRow(t, s, this.views.get(t.id)?.projection, this.busyKids(t));
+      // An Orca agent in a terminal: the game can watch it but not write to it.
+      if (t._orca && !t._orca.sessionId) row.ro = true;
+      // Its workspace's pull request and issue.
+      if (t._orca?.pr) row.pr = t._orca.pr;
+      if (t._orca?.issue) row.iss = escapeWow(t._orca.issue);
+      return row;
     });
     for (const p of t3.projects.values()) {
       if (p.archivedAt) continue;
@@ -995,6 +1033,12 @@ export class Bridge {
     return {
       bridge: {
         version: VERSION,
+        // Orca: no settling, snoozing, archiving, model changes, screenshots or usage.
+        orca: this.backend === 'orca' || undefined,
+        // The WoW Assistant's thread, once its chat exists.
+        asst: this.assistant?.threadId() || undefined,
+        // Orca was updated in a way that may break replies from the game.
+        warn: t3.local.client.apiWarning ? escapeWow(t3.local.client.apiWarning) : undefined,
         t3: t3.state,
         t3err: t3.error ? escapeWow(t3.error) : undefined,
         server: t3.config?.environment?.serverVersion,

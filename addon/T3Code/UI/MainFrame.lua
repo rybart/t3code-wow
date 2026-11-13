@@ -15,7 +15,7 @@ M.page = "threads"
 M.mode = "thread" -- "thread" | "new"
 
 -- The bottom bar's buttons, left to right.
-M.BAR_KEYS = { "Refresh", "New", "Back", "Stop", "Mic", "Speak", "Shot", "Insert", "Send" }
+M.BAR_KEYS = { "Refresh", "Ask", "New", "Back", "Stop", "Mic", "Speak", "Shot", "Insert", "Send" }
 
 ---------------------------------------------------------------------------
 -- Frame
@@ -46,7 +46,7 @@ function M:Create()
 	f:SetClampedToScreen(true)
 	f:EnableMouse(true)
 	f:Hide()
-	f:SetTitle("T3 Code")
+	f:SetTitle("Orca")
 	f:SetPortraitToAsset(ns.media .. "portrait")
 	tinsert(UISpecialFrames, "T3CodeFrame")
 
@@ -79,7 +79,7 @@ function M:Create()
 	f.Status:SetWidth(WIDTH - 220)
 
 	-- Collapse the thread list (arrow under the close button).
-	f.SidebarToggle = UI.IconButton(f, "common-icon-backarrow", 24, "Hide the thread list", function() M:ToggleSidebar() end)
+	f.SidebarToggle = UI.IconButton(f, "common-icon-backarrow", 24, "Hide the agent list", function() M:ToggleSidebar() end)
 	if not f.SidebarToggle.Icon:GetAtlas() then f.SidebarToggle.Icon:SetAtlas("common-dropdown-icon-back") end
 	f.SidebarToggle:SetPoint("TOPRIGHT", -10, -32)
 
@@ -104,7 +104,7 @@ function M:Create()
 
 	-- Side tabs.
 	f.Tabs = {
-		CreateSideTab(f, 1, ns.media .. "icon", "Threads", "threads"),
+		CreateSideTab(f, 1, ns.media .. "icon", "Agents", "threads"),
 		CreateSideTab(f, 2, "Interface\\Icons\\INV_Scroll_08", "Usage limits", "usage"),
 		CreateSideTab(f, 3, "Interface\\Icons\\INV_Misc_Gear_01", "Settings", "settings"),
 	}
@@ -196,10 +196,10 @@ function M:CreateThreadsPage(page)
 	end
 	UI.Tooltip(header.Snooze, function(self) return self:GetText() end, function()
 		local t = ns.Store:Thread(ns.viewId)
-		if t and t.s == "snoozed" then return "Bring this thread back to the Open list now." end
-		return "Hide this thread until a time you pick. The times are the snooze presets from T3 Code's settings."
+		if t and t.s == "snoozed" then return "Bring this agent back to the Open list now." end
+		return "Hide this agent until a time you pick. The times are the snooze presets from Orca's settings."
 	end)
-	UI.Tooltip(header.Archive, "Archive", "Hide this thread from the list (it stays in T3 Code's archive).")
+	UI.Tooltip(header.Archive, "Archive", "Hide this agent from the list (it stays in Orca's archive).")
 	header.Project = UI.Dropdown(header, 176, function(value)
 		M.newProject = value
 		M.newModel, M.newEffort = nil, nil
@@ -250,6 +250,7 @@ function M:CreateThreadsPage(page)
 	ns.Suggest:Attach(box)
 	right.Composer = box
 	self.composer = box
+	ns.GameContext.HookLinks()
 	self:SetPlaceholder("Message the agent  (Shift+Enter for a new line)")
 
 	local counter = UI.Text(composer, "GameFontDisableSmall", "RIGHT")
@@ -266,15 +267,20 @@ end
 
 function M:CreateButtonBar(f)
 	local bar = {}
-	bar.Refresh = UI.Button(f, "Refresh", 110, function()
+	bar.Refresh = UI.Button(f, "Refresh", 90, function()
 		ns.Transport:Send("ping")
 		PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
 	end)
 	bar.Refresh:SetPoint("BOTTOMLEFT", 6, 4)
 	UI.Tooltip(bar.Refresh, "Refresh", "Ask the bridge for a fresh update now.")
 
-	bar.New = UI.Button(f, "New Thread", 130, function() M:StartNewThread() end)
-	bar.New:SetPoint("LEFT", bar.Refresh, "RIGHT", 60, 0)
+	-- The WoW Assistant, with Orca: a chat that answers questions about the game.
+	bar.Ask = UI.Button(f, "Ask", 80, function() M:OpenAssistant() end)
+	bar.Ask:SetPoint("LEFT", bar.Refresh, "RIGHT", 6, 0)
+	UI.Tooltip(bar.Ask, "Ask the WoW Assistant", "Questions about the game: settings, items, quests. It can read your game settings and take a screenshot. /orca ask <question> works too.")
+
+	bar.New = UI.Button(f, "New Agent", 110, function() M:StartNewThread() end)
+	bar.New:SetPoint("LEFT", bar.Ask, "RIGHT", 6, 0)
 
 	bar.Back = UI.Button(f, "Back", 110, function() M:Back() end)
 	bar.Back:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", LIST_W + 18, 4)
@@ -314,7 +320,7 @@ function M:CreateButtonBar(f)
 	bar.Shot:SetScript("OnClick", function(_, button)
 		if button == "RightButton" then M:RemoveScreenshots() else M:AttachScreenshot() end
 	end)
-	UI.Tooltip(bar.Shot, "Attach a screenshot", "Adds a screenshot of the game to your next message. Right-click to remove it. /t3 report also adds diagnostics.")
+	UI.Tooltip(bar.Shot, "Attach a screenshot", "Adds a screenshot of the game to your next message. Right-click to remove it. /orca report also adds diagnostics.")
 	UI.Tooltip(bar.Speak, nil, "Read the latest reply aloud.")
 
 	-- The "/" and "$" suggestions as a list, for a controller, which can't type them.
@@ -328,7 +334,7 @@ function M:CreateButtonBar(f)
 	bar.Insert.onChange = function(value) M:InsertCommand(value) end
 	UI.Tooltip(bar.Insert, "Insert a command or skill", function(self)
 		if self:IsEnabled() then return "Adds it to your message. Typing / or $ in the message box lists them too." end
-		if not M:NextProvider() then return "Pick a thread, or start a new one, first." end
+		if not M:NextProvider() then return "Pick an agent, or start a new one, first." end
 		return "The model this message goes to has no commands or skills."
 	end)
 
@@ -348,7 +354,7 @@ function M:ShowPage(page)
 	local threads = page == "threads"
 	for _, key in ipairs(M.BAR_KEYS) do
 		-- Refresh and New belong to the thread list: they follow the sidebar instead.
-		if key ~= "Refresh" and key ~= "New" then f.Bar[key]:SetShown(threads) end
+		if key ~= "Refresh" and key ~= "New" and key ~= "Ask" then f.Bar[key]:SetShown(threads) end
 	end
 	f.SidebarToggle:SetShown(threads)
 	if page == "usage" then ns.Usage:Refresh() end
@@ -371,6 +377,7 @@ function M:ToggleSidebar(show)
 	page.Right:SetPoint("BOTTOMRIGHT")
 	self.frame.Bar.Refresh:SetShown(show)
 	self.frame.Bar.New:SetShown(show)
+	self.frame.Bar.Ask:SetShown(show and ns.Store:IsOrca())
 	self.frame.Bar.Back:ClearAllPoints()
 	if show then
 		self.frame.Bar.Back:SetPoint("BOTTOMLEFT", self.frame, "BOTTOMLEFT", LIST_W + 18, 4)
@@ -448,6 +455,34 @@ end
 function M:SendSnooze(threadId, ...)
 	local cmd = ns.Transport:Send("snooze", threadId, ...)
 	if cmd then self.pendingSnooze = { cmd = cmd, thread = threadId, at = GetTime() } end
+end
+
+-- The WoW Assistant opens like any agent. The bridge starts its chat the first time (on
+-- `text`, when given); an open one gets `text` as a message.
+function M:OpenAssistant(text)
+	self:Create()
+	text = text and strtrim(text) or ""
+	local bridge = ns.Store.data.bridge or {}
+	if bridge.asst and ns.Store:Thread(bridge.asst) then
+		self:SelectThread(bridge.asst, { show = true })
+		if text ~= "" then self:Send(text) else self.composer:SetFocus() end
+		return
+	end
+	if not ns.Store:IsOrca() then
+		ns.Print("The assistant needs the bridge to be watching Orca.")
+		return
+	end
+	local id
+	if text ~= "" then
+		local message = ns.GameContext.Build(text, function(m) return ns.Transport:Fits("assistant", m) end)
+		id = ns.Transport:Send("assistant", message)
+	else
+		id = ns.Transport:Send("assistant")
+	end
+	if not id then return end -- too long; try a shorter question
+	self.pendingNew = id
+	self:Open()
+	ns.Print(text ~= "" and "Asking the WoW Assistant…" or "Starting the WoW Assistant…")
 end
 
 function M:StartNewThread(projectId)
@@ -587,12 +622,16 @@ function M:Send(textOverride)
 	if text == "" then return end
 	local fam = self.mode ~= "new" and ns.Store:Family()
 	if fam and fam.ro then
-		ns.Print("This subagent is read only: it can't take messages. Message the thread that started it instead.")
+		ns.Print("This subagent is read only: it can't take messages. Message the agent that started it instead.")
+		return
+	end
+	if self.mode ~= "new" and ns.Store:ReadOnly(ns.Store:Thread(ns.viewId)) then
+		ns.Print("This agent runs in a terminal, so the game can only watch it. Reply to it in Orca.")
 		return
 	end
 	if self.mode == "new" then
 		if not self.newProject then
-			ns.Print("Pick a project for the new thread first.")
+			ns.Print("Pick a workspace for the new agent first.")
 			return
 		end
 		local instanceId, slug = ns.Store.SplitModelKey(self:ChosenNewModel())
@@ -613,17 +652,24 @@ function M:Send(textOverride)
 	elseif ns.viewId and not textOverride and ns.Transcript:CustomAnswer(text) then
 		ns.db.drafts[ns.viewId] = nil
 	elseif ns.viewId then
+		local mode = ns.db.settings.steerFollowUps and "steer" or nil
+		local out = ns.GameContext.Clean(text)
+		-- The assistant gets the character and any linked items' stats with the question.
+		if ns.Store:IsAssistant(ns.viewId) then
+			local view = ns.viewId
+			out = ns.GameContext.Build(text, function(message) return ns.Transport:Fits("send", view, message, mode) end)
+		end
 		local id
-		if ns.db.settings.steerFollowUps then
-			id = ns.Transport:Send("send", ns.viewId, text, "steer")
+		if mode then
+			id = ns.Transport:Send("send", ns.viewId, out, mode)
 		else
-			id = ns.Transport:Send("send", ns.viewId, text)
+			id = ns.Transport:Send("send", ns.viewId, out)
 		end
 		if not id then return end -- too long; the composer keeps it
-		ns.Transcript:AddLocalEcho(ns.viewId, text)
+		ns.Transcript:AddLocalEcho(ns.viewId, ns.GameContext.Clean(text))
 		ns.db.drafts[ns.viewId] = nil
 	else
-		ns.Print("Pick a thread, or start a new one.")
+		ns.Print("Pick an agent, or start a new one.")
 		return
 	end
 	if not textOverride then
@@ -693,7 +739,7 @@ end
 function M:AttachScreenshot()
 	local key = self:ShotKey()
 	if not key then
-		ns.Print("Open a thread (or start a new one) first, then attach the screenshot.")
+		ns.Print("Open an agent (or start a new one) first, then attach the screenshot.")
 		return
 	end
 	ns.Transport:Send("shot", key)
@@ -711,7 +757,7 @@ function M:Report(note)
 	if not ns.viewId and self.mode ~= "new" then self:StartNewThread() end
 	local T = ns.Transport
 	local b = ns.Store.data.bridge or {}
-	local lines = { "--- T3 Code for World of Warcraft diagnostics ---" }
+	local lines = { "--- Orca for World of Warcraft diagnostics ---" }
 	table.insert(lines, string.format("addon %s, bridge %s, T3 %s (%s)", ns.version, b.version or "?", b.t3 or "?", b.server or "?"))
 	table.insert(lines, string.format("link %s, signals %s via %s, live updates left %d/%d, queued %d", T:BridgeState(), T.signals, tostring(T.channel), T:SlotsLeft(), T.slotCount, #T.queue))
 	if b.envs then
@@ -771,7 +817,7 @@ local LINK_TEXT = {
 	connected = { "green", "Connected" },
 	waiting = { "orange", "Waiting for the bridge… (run t3code-wow install on your desktop)" },
 	stale = { "red", "Bridge not responding — is t3code-wow running?" },
-	t3offline = { "red", "Bridge connected, but T3 Code is offline" },
+	t3offline = { "red", "Bridge connected, but Orca is offline" },
 	exhausted = { "orange", "Live updates paused — /reload to resume" },
 }
 
@@ -790,6 +836,8 @@ function M:StatusLine()
 	if state == "connected" and left > 0 and left < math.max(40, T.slotCount * 0.15) then
 		text = text .. ns.Color("orange", string.format("  ·  %d live updates left", left))
 	end
+	local warn = ns.Store.data.bridge and ns.Store.data.bridge.warn
+	if warn then text = text .. ns.Color("orange", "  ·  Orca changed: replies may fail") end
 	if self.dictating then
 		text = text .. ns.Color("orange", "  ·  listening… release to finish")
 	elseif self.dictState == "transcribing" then
@@ -826,8 +874,9 @@ function M:HeaderText(t)
 	if t.s == "snoozed" then
 		return string.format("%s  ·  %s", ns.Color("grey", "Back " .. ns.Until(t.w)), ns.Store:ProjectName(t.p))
 	end
-	return string.format("%s  ·  %s  ·  %s",
-		ns.Color(ns.Store.StatusColor(t.s), ns.Store.StatusText(t.s)), ns.Store:ProjectName(t.p), age)
+	local pr = ns.Store.PRText(t.pr)
+	return string.format("%s  ·  %s  ·  %s%s",
+		ns.Color(ns.Store.StatusColor(t.s), ns.Store.StatusText(t.s)), ns.Store:ProjectName(t.p), age, pr and ("  ·  " .. pr) or "")
 end
 
 function M:Refresh()
@@ -844,8 +893,8 @@ function M:Refresh()
 	local panel = self.snoozePanel
 	if panel and panel:IsShown() and (panel.threadId ~= ns.viewId or self.mode == "new" or not t or t.s == "snoozed") then panel:Hide() end
 	if self.mode == "new" then
-		f.Subtitle:SetText("New Thread")
-		header.Text:SetText(ns.Color("gold", "New thread in"))
+		f.Subtitle:SetText("New Agent")
+		header.Text:SetText(ns.Color("gold", "New agent in"))
 		header.Action:Hide()
 		header.Archive:Hide()
 		header.Snooze:Hide()
@@ -854,8 +903,8 @@ function M:Refresh()
 		local withModel = self:SetupModelDropdown()
 		local withEffort = withModel and self:SetupEffortDropdown()
 		if not withEffort then header.Effort:Hide() end
-		header.Model.tipBody = "The model the new thread starts on. It's remembered for this project."
-		header.Effort.tipBody = "How hard the model reasons on the new thread. It's remembered for this project."
+		header.Model.tipBody = "The model the new agent starts on. It's remembered for this workspace."
+		header.Effort.tipBody = "How hard the model reasons on the new agent. It's remembered for this workspace."
 		header.Effort:ClearAllPoints()
 		header.Effort:SetPoint("RIGHT", -6, 0)
 		header.Model:ClearAllPoints()
@@ -885,6 +934,9 @@ function M:Refresh()
 			-- no Settle, Snooze or model of its own to pick here.
 			local fam = ns.Store:Family()
 			local subagent = fam and fam.up and fam.up.k == "sub" or false
+			-- Orca has no Settle, Snooze, Archive or model to change here, as for a subagent.
+			local readOnly = ns.Store:ReadOnly(t)
+			if ns.Store:IsOrca() then subagent = true end
 			f.Subtitle:SetText(t.title)
 			header.Text:SetText(self:HeaderText(t))
 			header.Action:SetShown(not subagent)
@@ -899,8 +951,8 @@ function M:Refresh()
 			if not withModel then header.Model:Hide() end
 			local withEffort = withModel and self:SetupEffortDropdown()
 			if not withEffort then header.Effort:Hide() end
-			header.Model.tipBody = "The model for this thread. A change applies from the next reply on."
-			header.Effort.tipBody = "How hard the model reasons on this thread. A change applies from the next reply on."
+			header.Model.tipBody = "The model for this agent. A change applies from the next reply on."
+			header.Effort.tipBody = "How hard the model reasons on this agent. A change applies from the next reply on."
 			local anchor = t.s == "settled" and header.Archive or (snoozable and header.Snooze or header.Action)
 			header.Effort:ClearAllPoints()
 			header.Effort:SetPoint("RIGHT", anchor, "LEFT", -4, 0)
@@ -910,7 +962,9 @@ function M:Refresh()
 			local buttons = subagent and 6 or ((t.s == "settled" or snoozable) and 200 or 110)
 			header.Text:SetPoint("RIGHT", -buttons - pickers, 0)
 			local busy = ns.db.settings.steerFollowUps and "Steer the agent" or "Queue a follow-up"
-			if fam and fam.ro then
+			if readOnly then
+				self:SetPlaceholder("This agent runs in a terminal. Reply to it in Orca.")
+			elseif fam and fam.ro then
 				self:SetPlaceholder("Read only: this subagent can't take messages.")
 			else
 				self:SetPlaceholder(((t.s == "working" or t.run) and busy or "Message the agent") .. "  (Shift+Enter for a new line)")
@@ -924,8 +978,8 @@ function M:Refresh()
 				f.Subtitle:SetText(rel and rel.t or ns.Color("grey", "Loading…"))
 				header.Text:SetText(status .. ns.Color("grey", "Loading…"))
 			else
-				f.Subtitle:SetText(ns.Color("grey", "No thread selected"))
-				header.Text:SetText(ns.Color("grey", "Pick a thread on the left, or start a new one"))
+				f.Subtitle:SetText(ns.Color("grey", "No agent selected"))
+				header.Text:SetText(ns.Color("grey", "Pick an agent on the left, or start a new one"))
 			end
 			header.Action:Hide()
 			header.Archive:Hide()
@@ -937,7 +991,19 @@ function M:Refresh()
 	end
 	f.Bar.Stop:SetEnabled(t ~= nil and (t.s == "working" or t.run) and self.mode ~= "new")
 	local fam = self.mode ~= "new" and ns.Store:Family()
-	f.Bar.Send:SetEnabled(not (fam and fam.ro))
+	local orca = ns.Store:IsOrca()
+	local readOnly = self.mode ~= "new" and ns.Store:ReadOnly(t)
+	f.Bar.Send:SetEnabled(not (fam and fam.ro) and not readOnly)
+	if readOnly then
+		f.Bar.Stop:SetEnabled(false)
+		f.Bar.Stop.Icon:SetDesaturated(true)
+	end
+	-- Orca: no commands list and no usage tab. Ask belongs to the agent list, like New.
+	if self.page == "threads" then f.Bar.Insert:SetShown(not orca) end
+	f.Bar.Ask:SetShown(orca and f.Pages.threads.Left:IsShown())
+	f.Tabs[2]:SetShown(not orca)
+	f.Tabs[3]:SetPoint("TOPLEFT", f, "TOPRIGHT", 0, orca and -84 or -132)
+	if orca and self.page == "usage" then self:ShowPage("threads") return end
 	f.Bar.Stop.Icon:SetDesaturated(not f.Bar.Stop:IsEnabled())
 	local bridge = ns.Store.data.bridge
 	local canDictate = self.dictating or not (bridge and bridge.dictationHint)
@@ -1214,7 +1280,7 @@ ns:On("CommandResult", function(r)
 	if r.ok == false and M.pendingSnooze and r.id == M.pendingSnooze.cmd then M.pendingSnooze = nil end
 	if r.ok == false and r.msg then
 		ns.Print(ns.Color("red", r.msg))
-		if UIErrorsFrame then UIErrorsFrame:AddMessage("T3 Code: " .. r.msg, 1, 0.2, 0.2) end
+		if UIErrorsFrame then UIErrorsFrame:AddMessage("Orca: " .. r.msg, 1, 0.2, 0.2) end
 	end
 	if r.ok == false then
 		local refused

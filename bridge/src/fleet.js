@@ -13,7 +13,9 @@ import { remoteTokenProvider, remoteOriginProvider } from './envs.js';
 const SEP = '~';
 
 export class Fleet extends EventEmitter {
-  constructor({ localTokens, environments = [], log = () => {} }) {
+  // `localClient` replaces this machine's T3 Code client (the Orca fork passes an
+  // OrcaClient); it needs the same events and methods as T3Client.
+  constructor({ localTokens, localClient = null, environments = [], log = () => {} }) {
     super();
     this.log = log;
     this.envs = [];
@@ -22,7 +24,7 @@ export class Fleet extends EventEmitter {
     // This machine's T3 environment id, known once its config arrives.
     this.localEnvironmentId = null;
     const local = { code: '', id: 'local', label: 'local', local: true };
-    local.client = new T3Client({ tokenProvider: localTokens, log, label: 'local' });
+    local.client = localClient || new T3Client({ tokenProvider: localTokens, log, label: 'local' });
     local.tokens = localTokens;
     this.envs.push(local);
     for (const e of environments) {

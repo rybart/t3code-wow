@@ -17,6 +17,7 @@ ns.COLORS = {
 	blue = "ff71d5ff",
 	agent = "ff4a9eff",
 	orange = "ffff9b38",
+	purple = "ffa335ee",
 }
 
 function ns.Color(key, text)
@@ -33,7 +34,7 @@ function ns:On(event, fn)
 	table.insert(listeners[event], fn)
 end
 
--- Forever hides Lua errors by default, so keep our own: shown by /t3 errors and the
+-- Forever hides Lua errors by default, so keep our own: shown by /orca errors and the
 -- Settings tab, and saved with the addon's data (readable after /reload).
 ns.errors = {}
 
@@ -51,7 +52,7 @@ function ns.RecordError(err)
 	if not ns.errorNotified then
 		ns.errorNotified = true
 		if DEFAULT_CHAT_FRAME then
-			DEFAULT_CHAT_FRAME:AddMessage("|cffffd100T3 Code|r: |cffff4040something went wrong|r — type /t3 errors for details.")
+			DEFAULT_CHAT_FRAME:AddMessage("|cffffd100Orca|r: |cffff4040something went wrong|r — type /orca errors for details.")
 		end
 	end
 end
@@ -91,6 +92,8 @@ local DEFAULTS = {
 		autoRead = false,
 		project = "all",
 		quickReplies = true,
+		awaySummary = true,
+		prNotices = true,
 		collapsed = { snoozed = true, settled = true },
 		strip = true,
 		trackerLocked = true,
@@ -173,7 +176,7 @@ end
 
 function ns.Print(...)
 	local msg = strjoin(" ", tostringall(...))
-	DEFAULT_CHAT_FRAME:AddMessage(ns.Color("gold", "T3 Code") .. ": " .. msg)
+	DEFAULT_CHAT_FRAME:AddMessage(ns.Color("gold", "Orca") .. ": " .. msg)
 end
 
 function ns.InCombat()

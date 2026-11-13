@@ -1,7 +1,7 @@
 ## Interface: 16001
-## Title: T3 Code
+## Title: Orca
 ## Group: T3Code
-## Notes: Watch and run your T3 Code agent threads from inside the game. Needs the t3code-wow bridge running on this computer.
+## Notes: Watch your Orca agents and start new ones from inside the game. Needs the t3code-wow bridge running on this computer.
 ## Author: Ryan Hughes
 ## Version: 0.5.0
 ## X-License: MIT
@@ -18,6 +18,7 @@ Core\Crypto.lua
 Core\Init.lua
 Core\Transport.lua
 Core\Store.lua
+Core\GameContext.lua
 UI\Templates.xml
 UI\Widgets.lua
 UI\MainFrame.lua

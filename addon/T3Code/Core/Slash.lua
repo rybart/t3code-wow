@@ -2,9 +2,9 @@
 
 local _, ns = ...
 
-BINDING_HEADER_T3CODE = "T3 Code"
-BINDING_NAME_T3CODE_TOGGLE = "Open or close T3 Code"
-BINDING_NAME_T3CODE_NEW = "Start a new thread"
+BINDING_HEADER_T3CODE = "Orca"
+BINDING_NAME_T3CODE_TOGGLE = "Open or close Orca"
+BINDING_NAME_T3CODE_NEW = "Start a new agent"
 BINDING_NAME_T3CODE_TALK = "Push to talk (dictation)"
 BINDING_NAME_T3CODE_READ = "Read the latest reply aloud"
 BINDING_NAME_T3CODE_HUSH = "Stop reading aloud"
@@ -44,9 +44,9 @@ end
 
 function T3Code_OnAddonCompartmentEnter(_, menuButtonFrame)
 	GameTooltip:SetOwner(menuButtonFrame, "ANCHOR_LEFT")
-	GameTooltip:SetText("T3 Code", 1, 0.82, 0)
+	GameTooltip:SetText("Orca", 1, 0.82, 0)
 	local active = ns.Store:Active()
-	GameTooltip:AddLine(#active > 0 and (#active .. " active thread" .. (#active == 1 and "" or "s")) or "Nothing running", 1, 1, 1)
+	GameTooltip:AddLine(#active > 0 and (#active .. " active agent" .. (#active == 1 and "" or "s")) or "Nothing running", 1, 1, 1)
 	GameTooltip:AddLine("Click to open, right-click for settings", 0.6, 0.6, 0.6)
 	GameTooltip:Show()
 end
@@ -73,13 +73,13 @@ function ns.SelfTest()
 	local age = T.bridgeNow and (time() - T.bridgeNow) or nil
 	line(age ~= nil and age < 300, "bridge: " .. (b.version and ("t3code-wow " .. b.version) or "not heard from") .. (age and string.format(", last update %ds ago", age) or ""),
 		"check `t3code-wow status` on your desktop")
-	line(b.t3 == "connected", "T3 Code on this computer: " .. tostring(b.t3), b.t3err)
+	line(b.t3 == "connected", "Orca on this computer: " .. tostring(b.t3), b.t3err)
 	for _, e in ipairs(b.envs or {}) do
-		if not e["local"] then line(e.state == "connected", "T3 Code on " .. e.label .. ": " .. tostring(e.state), "check that machine is on and reachable") end
+		if not e["local"] then line(e.state == "connected", "Orca on " .. e.label .. ": " .. tostring(e.state), "check that machine is on and reachable") end
 	end
 	line(T:SlotsLeft() > 40, string.format("live updates left: %d of %d", T:SlotsLeft(), T.slotCount), "/reload to free a fresh set")
 	local errs = ns.db.errors or {}
-	line(#errs == 0, string.format("addon errors recorded: %d", #errs), "/t3 errors to see them")
+	line(#errs == 0, string.format("addon errors recorded: %d", #errs), "/orca errors to see them")
 	-- Round trip: show the strip and time the bridge's acknowledgement.
 	T:Touch()
 	local seq, started = T.stripSeq, GetTime()
@@ -100,12 +100,13 @@ end
 local function Status()
 	local T = ns.Transport
 	local b = ns.Store.data.bridge or {}
-	ns.Print(string.format("link %s · T3 %s · %d threads · live updates left %d/%d · signals %s · queued %d",
+	ns.Print(string.format("link %s · Orca %s · %d agents · live updates left %d/%d · signals %s · queued %d",
 		T:BridgeState(), b.t3 or "?", #ns.Store.data.threads, T:SlotsLeft(), T.slotCount, T.signals .. " (" .. tostring(T.channel) .. ", " .. tostring(T.selfTests or 0) .. " tests)", #T.queue))
 end
 
-SLASH_T3CODE1 = "/t3"
-SLASH_T3CODE2 = "/t3code"
+SLASH_T3CODE1 = "/orca"
+SLASH_T3CODE2 = "/t3"
+SLASH_T3CODE3 = "/t3code"
 SlashCmdList.T3CODE = function(msg)
 	msg = strtrim(msg or "")
 	local cmd, rest = msg:match("^(%S*)%s*(.-)$")
@@ -115,6 +116,8 @@ SlashCmdList.T3CODE = function(msg)
 	elseif cmd == "new" then
 		ns.Main:StartNewThread()
 		if rest ~= "" then ns.Main.composer:SetText(rest) end
+	elseif cmd == "ask" then
+		ns.Main:OpenAssistant(rest)
 	elseif cmd == "settings" or cmd == "options" then
 		ns.Main:Open()
 		ns.Main:ShowPage("settings")
@@ -155,13 +158,14 @@ SlashCmdList.T3CODE = function(msg)
 				local e = list[i]
 				ns.Print(ns.Color("grey", date("%H:%M:%S", e.t)) .. " " .. ns.Color("red", e.msg))
 			end
-			ns.Print(ns.Color("grey", "(/t3 errors clear to reset. They're also saved with the addon's data on /reload.)"))
+			ns.Print(ns.Color("grey", "(/orca errors clear to reset. They're also saved with the addon's data on /reload.)"))
 		end
 	else
-		ns.Print("/t3 — open the window")
-		ns.Print("/t3 new [text] — start a new thread")
-		ns.Print("/t3 report [what went wrong] — diagnostics + screenshot into the message box")
-		ns.Print("/t3 shot — attach a screenshot to your next message")
-		ns.Print("/t3 selftest | usage | settings | status | tracker | unlock | lock | hush | errors")
+		ns.Print("/orca — open the window")
+		ns.Print("/orca new [text] — start a new agent")
+		ns.Print("/orca ask [question] — ask the WoW Assistant about the game")
+		ns.Print("/orca report [what went wrong] — diagnostics + screenshot into the message box")
+		ns.Print("/orca shot — attach a screenshot to your next message")
+		ns.Print("/orca selftest | usage | settings | status | tracker | unlock | lock | hush | errors")
 	end
 end

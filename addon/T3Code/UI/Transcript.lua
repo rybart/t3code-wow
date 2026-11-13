@@ -302,19 +302,19 @@ function T:Elements()
 	local list = {}
 	local main = ns.Main
 	if main.mode == "new" then
-		table.insert(list, Note(ns.Color("gold", "Start a new thread") .. "\n\nPick the project above, describe the task in the box below and press "
-			.. ns.Color("white", "Start") .. ". The agent runs on your computer with your T3 Code defaults.", "common-icon-forwardarrow"))
+		table.insert(list, Note(ns.Color("gold", "Start a new agent") .. "\n\nPick the workspace above, describe the task in the box below and press "
+			.. ns.Color("white", "Start") .. ". It opens as a chat in Orca, on its default model.", "common-icon-forwardarrow"))
 		return list
 	end
 	local id = ns.viewId
 	if not id then
 		local b = ns.Store.data.bridge or {}
-		local lines = { ns.Color("gold", "T3 Code") .. (b.host and ns.Color("grey", "  on " .. b.host) or "") }
+		local lines = { ns.Color("gold", "Orca") .. (b.host and ns.Color("grey", "  on " .. b.host) or "") }
 		local active = ns.Store:Active()
 		if #active > 0 then
-			table.insert(lines, string.format("\n%d thread%s need%s you or %s working.", #active, #active == 1 and "" or "s", #active == 1 and "s" or "", #active == 1 and "is" or "are"))
+			table.insert(lines, string.format("\n%d agent%s need%s you or %s working.", #active, #active == 1 and "" or "s", #active == 1 and "s" or "", #active == 1 and "is" or "are"))
 		end
-		table.insert(lines, "\nPick a thread on the left to read it and reply, or start a new one.")
+		table.insert(lines, "\nPick an agent on the left to read it and reply, or start a new one.")
 		if ns.Gamepad:IsActive() then
 			table.insert(lines, "\n" .. ns.Gamepad:HelpText())
 		end
@@ -333,7 +333,7 @@ function T:Elements()
 		return list
 	end
 	if v.more then
-		table.insert(list, Note(ns.Color("grey", "Earlier messages are in T3 Code."), "common-icon-undo"))
+		table.insert(list, Note(ns.Color("grey", "Earlier messages are in Orca."), "common-icon-undo"))
 	end
 	local echo = self.echo[id]
 	for _, m in ipairs(v.msgs or {}) do
@@ -414,7 +414,7 @@ function T:Elements()
 	end
 	if t and (t.s == "working" or t.run) then
 		table.insert(list, Note(ns.Color("agent", (t.run and t.l) or v.act or t.l or "Working"), "common-icon-undo", { spin = true, since = t.st, live = true }))
-	elseif t and (t.s == "open" or t.s == "failed" or t.s == "waiting") and ns.db.settings.quickReplies and not p then
+	elseif t and (t.s == "open" or t.s == "failed" or t.s == "waiting") and ns.db.settings.quickReplies and not ns.Store:ReadOnly(t) and not p then
 		for _, text in ipairs(QUICK_REPLIES) do
 			table.insert(list, Option(text:gsub("%.$", ""), function() ns.Main:Send(text) end))
 		end

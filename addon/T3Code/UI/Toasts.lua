@@ -96,7 +96,9 @@ function N:Show(t, kind)
 	f.threadId = t.id
 	f.shownAt = GetTime()
 	local headline = ({ input = ns.Color("orange", "Needs you"), plan = ns.Color("orange", "Plan ready"),
-		failed = ns.Color("red", "Failed"), open = ns.Color("green", "Finished") })[kind] or ""
+		failed = ns.Color("red", "Failed"), open = ns.Color("green", "Finished"),
+		prfail = ns.Color("red", "PR checks failing"), prpass = ns.Color("green", "PR checks passed"),
+		merged = ns.Color("purple", "PR merged") })[kind] or ""
 	f.Title:SetText(t.title)
 	f.Text:SetText(headline .. ns.Color("grey", "  ·  " .. ns.Store:ProjectName(t.p)) .. (t.last and ("\n" .. t.last) or ""))
 	-- Grow the frame to fit the text (up to four lines of the reply).
@@ -116,11 +118,11 @@ N.held = {}
 
 local function Notify(t, kind, quietSound)
 	local s = ns.db.settings
-	if not quietSound then Sound(kind) end
+	if not quietSound then Sound(kind == "prfail" and "failed" or kind) end
 	local viewing = ns.windowOpen and ns.viewId == t.id
 	if s.toasts and not viewing then N:Show(t, kind) end
 	-- Desktop voice is handled by the bridge (flag "r"); the game's voice here.
-	if s.autoRead and ns.SpeechEngine() == "game" then
+	if s.autoRead and ns.SpeechEngine() == "game" and VERBS[kind] then
 		ns.Speak(t.title .. " " .. VERBS[kind] .. ". " .. (t.last or ""))
 	end
 end
@@ -142,6 +144,43 @@ ns:On("ThreadTransition", function(t, before, after)
 		return
 	end
 	Notify(t, kind)
+end)
+
+-- A workspace's pull request: checks failed or passed, or it merged. Shown on one of its
+-- agents, so clicking the notice opens that agent.
+local PR_VERBS = { prfail = "has failing checks", prpass = "passed its checks", merged = "was merged" }
+ns:On("PRTransition", function(t, kind)
+	if not ns.db.settings.prNotices then return end
+	ns.Print(string.format("PR #%s (%s) %s.", tostring(t.pr.n), ns.Store:ProjectName(t.p), PR_VERBS[kind]))
+	if ns.IsQuiet() then
+		table.insert(N.held, { t = t, kind = kind })
+		while #N.held > 3 do table.remove(N.held, 1) end
+		return
+	end
+	Notify(t, kind)
+end)
+
+-- Logging in (or a /reload): what the agents did meanwhile, in one chat line. Quiet when
+-- nothing waits on the player.
+ns:On("FirstLive", function()
+	if not ns.db.settings.awaySummary then return end
+	local finished, needs, working = 0, 0, 0
+	for _, t in ipairs(ns.Store.data.threads or {}) do
+		if t.s == "input" or t.s == "plan" then needs = needs + 1
+		elseif t.s == "working" or t.s == "waiting" then working = working + 1
+		elseif t.un and (t.s == "open" or t.s == "failed") then finished = finished + 1 end
+	end
+	if finished == 0 and needs == 0 then return end
+	local parts = {}
+	if finished > 0 then table.insert(parts, ns.Color("green", finished .. (finished == 1 and " agent finished" or " agents finished"))) end
+	if needs > 0 then table.insert(parts, ns.Color("orange", needs .. (needs == 1 and " needs you" or " need you"))) end
+	if working > 0 then table.insert(parts, working .. " still working") end
+	C_Timer.After(4, function() ns.Print("While you were away: " .. table.concat(parts, ", ") .. ". /orca to see them.") end)
+end)
+
+-- Orca changed in a way that may stop replies from the game.
+ns:On("BridgeWarning", function(warn)
+	ns.Print(ns.Color("orange", warn))
 end)
 
 local function Flush()

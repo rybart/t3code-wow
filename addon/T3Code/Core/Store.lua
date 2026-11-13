@@ -103,6 +103,7 @@ function Store:Apply(data)
 	end
 
 	if self.applied > 1 then
+		local prsSeen = {}
 		for id, t in pairs(byId) do
 			local old = before[id]
 			if old and old.s ~= t.s then
@@ -110,7 +111,21 @@ function Store:Apply(data)
 			elseif not old and (t.s == "working" or t.s == "input") then
 				ns:Fire("ThreadTransition", t, nil, t.s)
 			end
+			-- A workspace's pull request changed: once per PR, though its agents share it.
+			local kind = old and Store.PRChange(old.pr, t.pr)
+			if kind and not prsSeen[t.pr.n] then
+				prsSeen[t.pr.n] = true
+				ns:Fire("PRTransition", t, kind)
+			end
 		end
+	end
+	-- Orca was updated in a way that may break replies: say so once per new warning.
+	local warn = data.bridge and data.bridge.warn
+	if warn and warn ~= (prev.bridge and prev.bridge.warn) then ns:Fire("BridgeWarning", warn) end
+	-- The first snapshot answering this session's hello: what happened while away.
+	if not self.liveSeen and type(data.ack) == "table" and data.ack.ui == ns.ui then
+		self.liveSeen = true
+		ns:Fire("FirstLive")
 	end
 	ns:Fire("DataChanged")
 	if data.view and data.view.id == ns.viewId then ns:Fire("ViewChanged") end
@@ -307,6 +322,49 @@ function Store.HasOption(options, value)
 	return false
 end
 
+-- True when the bridge watches Orca, which has no settling, snoozing, archiving, model
+-- changes, screenshots or usage, so the window doesn't offer those. Chat agents take
+-- replies, Stop and answers; an agent in a terminal (its row's `ro`) is watch only.
+function Store:IsOrca()
+	local b = self.data and self.data.bridge
+	return b and b.orca and true or false
+end
+
+-- What changed on a pull request worth a notice: "merged", "prfail" (checks failing)
+-- or "prpass" (checks passed after running). Nil for anything else, or a first sighting.
+function Store.PRChange(old, new)
+	if type(old) ~= "table" or type(new) ~= "table" or old.n ~= new.n then return nil end
+	if new.s == "merged" and old.s ~= "merged" then return "merged" end
+	if new.c ~= old.c then
+		if new.c == "failure" then return "prfail" end
+		if new.c == "success" then return "prpass" end
+	end
+end
+
+-- A pull request in a few words, colored by how it stands: "PR #12 failing".
+function Store.PRText(pr)
+	if type(pr) ~= "table" or not pr.n then return nil end
+	local label, color
+	if pr.s == "merged" then label, color = "merged", "purple"
+	elseif pr.s == "closed" then label, color = "closed", "grey"
+	elseif pr.c == "failure" then label, color = "failing", "red"
+	elseif pr.c == "pending" then label, color = "checks running", "grey"
+	elseif pr.c == "success" then label, color = (pr.s == "draft" and "draft, passing" or "passing"), "green"
+	else label, color = (pr.s == "draft" and "draft" or "open"), "grey" end
+	return ns.Color(color, "PR #" .. pr.n .. " " .. label)
+end
+
+-- The WoW Assistant's thread, which gets game context with each question.
+function Store:IsAssistant(id)
+	local b = self.data and self.data.bridge
+	return id ~= nil and b and b.asst == id or false
+end
+
+-- An Orca agent the game can watch but not write to.
+function Store:ReadOnly(t)
+	return t and t.ro and self:IsOrca() or false
+end
+
 function Store:View()
 	local v = self.data.view
 	if v and v.id == ns.viewId then return v end
@@ -379,7 +437,7 @@ function ns.Speak(text, threadId, messageIndex)
 		C_VoiceChat.SpeakText(voice, ns.StripMarkup(text):sub(1, 2000), rate, volume, false)
 		return true
 	end
-	ns.Print("No text-to-speech voice is available. Pick one in T3 Code settings.")
+	ns.Print("No text-to-speech voice is available. Pick one in Orca settings.")
 	return false
 end
 

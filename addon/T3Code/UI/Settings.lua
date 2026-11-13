@@ -7,18 +7,19 @@ local S = {}
 ns.Settings = S
 
 local CHECKS = {
-	{ key = "tracker", label = "Show T3 Code in the tracker area", after = function() ns.Tracker:Refresh() end },
+	{ key = "tracker", label = "Show Orca in the tracker area", after = function() ns.Tracker:Refresh() end },
 	{ key = "trackerAlways", label = "Keep its header when nothing is running", after = function() ns.Tracker:Refresh() end },
 	{ key = "trackerLocked", label = "Lock the tracker in place", after = function() ns.Tracker:Refresh() end },
-	{ key = "toasts", label = "Pop up a notice when a thread finishes or needs you" },
+	{ key = "toasts", label = "Pop up a notice when an agent finishes or needs you" },
 	{ key = "sounds", label = "Play a sound with notices" },
+	{ key = "prNotices", label = "Pop up a notice when a pull request's checks pass, fail or it merges" },
+	{ key = "awaySummary", label = "Sum up what your agents did when you log in" },
 	{ key = "quietInstances", label = "Stay quiet in dungeons, raids and PvP", tip = "Notices and read-aloud wait until you're out. They always wait during combat.", after = function() ns.Transport:Touch() end },
 	{ key = "autoRead", label = "Read finished replies aloud", after = function() ns.Transport:Touch() end },
-	{ key = "steerFollowUps", label = "Steer a working thread with follow-ups", tip = "A message to a thread that's still working goes into its current run, as in T3 Code. Turn this off to queue it until the run finishes.", after = function() ns.Main:Refresh() end },
-	{ key = "newWorktree", label = "Start new threads in a worktree", tip = "Each new thread gets its own git branch and checkout, so it can't collide with the project folder. T3 Code names the branch after the task." },
+	{ key = "steerFollowUps", label = "Steer a working agent with follow-ups", tip = "A message to an agent that's still working goes into its current turn. Turn this off to queue it until the turn finishes.", after = function() ns.Main:Refresh() end },
 	{ key = "dictateSend", label = "Send dictated messages right away" },
-	{ key = "quickReplies", label = "Show quick replies under finished threads", after = function() ns.Transcript:Refresh(true) end },
-	{ key = "gameMenu", label = "Add T3 Code to the game menu" },
+	{ key = "quickReplies", label = "Show quick replies under finished agents", after = function() ns.Transcript:Refresh(true) end },
+	{ key = "gameMenu", label = "Add Orca to the game menu" },
 	{ key = "minimapButton", label = "Show the minimap button", after = function() ns.MinimapButton:Refresh() end },
 }
 
@@ -69,7 +70,7 @@ function S:Create(page)
 	dd:SetOptions(options, ns.db.settings.tts)
 	self.voice = dd
 	local test = UI.Button(page, "Test voice", 110, function()
-		ns.Speak("Hello from T3 Code. This is how replies will sound.", "", "test")
+		ns.Speak("Hello from Orca. This is how replies will sound.", "", "test")
 	end)
 	test:SetPoint("LEFT", dd, "RIGHT", 10, 0)
 	y = y - 40
@@ -113,7 +114,7 @@ function S:Create(page)
 	UI.Tooltip(selftest, "Run self-test", "Checks the link to your desktop step by step and prints what's wrong, if anything.")
 	local report = UI.Button(page, "Report a problem", 150, function() ns.Main:ShowPage("threads") ns.Main:Report() end)
 	report:SetPoint("LEFT", selftest, "RIGHT", 10, 0)
-	UI.Tooltip(report, "Report a problem", "Puts diagnostics in the message box and attaches a screenshot, for the thread you have open (or a new one).")
+	UI.Tooltip(report, "Report a problem", "Puts diagnostics in the message box and attaches a screenshot, for the agent you have open (or a new one).")
 	self.controls = { dd, size, test, reload, resetTracker, selftest, report }
 end
 
@@ -136,14 +137,14 @@ function S:Refresh()
 	local b = ns.Store.data.bridge or {}
 	local lines = {
 		"Bridge: " .. (b.version and ns.Color("green", "t3code-wow " .. b.version) or ns.Color("red", "not heard from")),
-		"T3 Code: " .. (b.t3 == "connected" and ns.Color("green", "connected" .. (b.server and (" (" .. b.server .. ")") or "")) or ns.Color("red", b.t3 or "unknown"))
+		"Orca: " .. (b.t3 == "connected" and ns.Color("green", "connected" .. (b.server and (" (" .. b.server .. ")") or "")) or ns.Color("red", b.t3 or "unknown"))
 			.. (b.t3err and ns.Color("grey", " — " .. b.t3err) or ""),
 		(function()
 			if not b.envs then return "Machines: this computer only " .. ns.Color("grey", "(add more with t3code-wow env add <host>)") end
 			local parts = {}
 			for _, e in ipairs(b.envs) do
 				local ok = e.state == "connected"
-				table.insert(parts, ns.Color(ok and "green" or "red", e.label) .. ns.Color("grey", string.format(" (%s)", ok and (e.n .. " threads") or e.state)))
+				table.insert(parts, ns.Color(ok and "green" or "red", e.label) .. ns.Color("grey", string.format(" (%s)", ok and (e.n .. " agents") or e.state)))
 			end
 			return "Machines: " .. table.concat(parts, ", ")
 		end)(),
@@ -153,7 +154,7 @@ function S:Refresh()
 		"Speaking with: " .. ({ system = "desktop voice", game = "game voice", off = "nothing (off)" })[ns.SpeechEngine()],
 		"Controller shortcut: " .. (ns.Launcher.chordText and ns.Color("white", "hold " .. ns.Launcher.KeyText("PADLTRIGGER") .. " + " .. ns.Launcher.KeyText("PADRTRIGGER") .. ", press " .. ns.Launcher.KeyText("PADBACK")) or ns.Color("grey", "off (use the minimap button or the game menu)"))
 			.. ns.Color("grey", "  (also in the game menu)"),
-		"Errors: " .. ((ns.db.errors and #ns.db.errors > 0) and ns.Color("red", #ns.db.errors .. " recorded — /t3 errors") or ns.Color("green", "none")),
+		"Errors: " .. ((ns.db.errors and #ns.db.errors > 0) and ns.Color("red", #ns.db.errors .. " recorded — /orca errors") or ns.Color("green", "none")),
 		"Addon " .. ns.version .. ns.Color("grey", "  ·  session " .. (ns.db.session or "?")),
 	}
 	self.info:SetText(table.concat(lines, "\n"))
@@ -169,20 +170,20 @@ ns:On("Login", function()
 	local panel = CreateFrame("Frame")
 	local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
 	title:SetPoint("TOPLEFT", 16, -16)
-	title:SetText("T3 Code")
+	title:SetText("Orca")
 	local text = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 	text:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	text:SetText("Watch and run your T3 Code agents from inside the game. Type /t3 to open the window.")
+	text:SetText("Watch and run your Orca agents from inside the game. Type /orca to open the window.")
 	local open = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
 	open:SetSize(200, 24)
 	open:SetPoint("TOPLEFT", text, "BOTTOMLEFT", 0, -16)
-	open:SetText("Open T3 Code settings")
+	open:SetText("Open Orca settings")
 	open:SetScript("OnClick", function()
 		if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
 		ns.Main:Open()
 		ns.Main:ShowPage("settings")
 	end)
-	local category = Settings.RegisterCanvasLayoutCategory(panel, "T3 Code")
+	local category = Settings.RegisterCanvasLayoutCategory(panel, "Orca")
 	Settings.RegisterAddOnCategory(category)
 	ns.settingsCategory = category
 end)

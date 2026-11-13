@@ -431,7 +431,7 @@ function G:ExplicitMove(cur, dirKey)
 	end
 
 	if zone == "bar" and dirKey == "PADDUP" then
-		if (barKey == "Refresh" or barKey == "New") and listShown then
+		if (barKey == "Refresh" or barKey == "Ask" or barKey == "New") and listShown then
 			return self:SelectOpenThreadRow()
 		end
 		return self:SelectConversation()
@@ -528,9 +528,14 @@ end
 -- Input
 
 local function SwitchPage(delta)
+	-- Watching Orca there's no Usage tab to switch to.
+	local pages = {}
+	for _, p in ipairs(PAGES) do
+		if not (p == "usage" and ns.Store:IsOrca()) then table.insert(pages, p) end
+	end
 	local current = 1
-	for i, p in ipairs(PAGES) do if p == ns.Main.page then current = i end end
-	ns.Main:ShowPage(PAGES[(current - 1 + delta) % #PAGES + 1])
+	for i, p in ipairs(pages) do if p == ns.Main.page then current = i end end
+	ns.Main:ShowPage(pages[(current - 1 + delta) % #pages + 1])
 	PlaySound(SOUNDKIT.IG_CHARACTER_INFO_TAB)
 	G:SelectDefault()
 end
@@ -707,7 +712,7 @@ function G:HelpText()
 	local chord = ns.Launcher and ns.Launcher.chordText
 	return string.format("%s select  ·  %s back  ·  %s hold to talk  ·  %s read aloud  ·  %s%s tabs%s",
 		UI.Glyph("PAD1"), UI.Glyph("PAD2"), UI.Glyph("PAD4"), UI.Glyph("PAD3"), Bumper("PADLSHOULDER"), Bumper("PADRSHOULDER"),
-		chord and ("\nOpen or close T3 Code anywhere: hold " .. ns.Launcher.KeyText("PADLTRIGGER") .. " + " .. ns.Launcher.KeyText("PADRTRIGGER") .. " and press " .. ns.Launcher.KeyText("PADBACK") .. ".") or "\nOpen T3 Code any time from the minimap button or the game menu.")
+		chord and ("\nOpen or close Orca anywhere: hold " .. ns.Launcher.KeyText("PADLTRIGGER") .. " + " .. ns.Launcher.KeyText("PADRTRIGGER") .. " and press " .. ns.Launcher.KeyText("PADBACK") .. ".") or "\nOpen Orca any time from the minimap button or the game menu.")
 end
 
 
@@ -896,7 +901,7 @@ function L:HookGameMenu()
 	hooksecurefunc(GameMenuFrame, "InitButtons", function(menu)
 		if ns.db.settings.gameMenu == false then return end
 		local ok, err = pcall(function()
-			local button = menu:AddButton("T3 Code", function()
+			local button = menu:AddButton("Orca", function()
 				PlaySound(SOUNDKIT.IG_MAINMENU_OPTION)
 				HideUIPanel(menu)
 				L:Open()
@@ -920,7 +925,7 @@ ns:On("Login", function()
 	L:SetupChord()
 	if L.chordText and ns.Gamepad:IsActive() and not ns.db.chordAnnounced then
 		ns.db.chordAnnounced = L.chord
-		ns.Print("Open T3 Code from your controller: hold " .. L.KeyText("PADLTRIGGER") .. " + " .. L.KeyText("PADRTRIGGER") .. " and press " .. L.KeyText("PADBACK") .. ". It's also in the game menu.")
+		ns.Print("Open Orca from your controller: hold " .. L.KeyText("PADLTRIGGER") .. " + " .. L.KeyText("PADRTRIGGER") .. " and press " .. L.KeyText("PADBACK") .. ". It's also in the game menu.")
 	end
 end)
 

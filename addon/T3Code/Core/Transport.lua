@@ -70,7 +70,7 @@ local function SetKeys(hex)
 		-- only sees new files after a restart.
 		if not T.needsRestart then
 			T.needsRestart = true
-			ns.Print("T3 Code was updated with new files. Quit and restart the game (a /reload isn't enough) to finish.")
+			ns.Print("Orca was updated with new files. Quit and restart the game (a /reload isn't enough) to finish.")
 		end
 		return false
 	end
@@ -314,11 +314,16 @@ local function HelloGrowth()
 	return grow
 end
 
+-- Whether a command would fit in a frame beside the hello.
+function T:Fits(verb, ...)
+	local rec = Codec.Record({ "C", (ns.db.cmdId or 0) + 1, verb, ... })
+	return #self:Hello() + 1 + #rec + HelloGrowth() <= Codec.MAX_PAYLOAD - Codec.SEAL_OVERHEAD
+end
+
 -- Queue a command for the bridge. Returns its id.
 function T:Send(verb, ...)
 	local db = ns.db
-	local rec = Codec.Record({ "C", (db.cmdId or 0) + 1, verb, ... })
-	if #self:Hello() + 1 + #rec + HelloGrowth() > Codec.MAX_PAYLOAD - Codec.SEAL_OVERHEAD then
+	if not self:Fits(verb, ...) then
 		ns.Print("That's too long to send from the game. Shorten it to about 2,000 characters and try again.")
 		return nil
 	end
@@ -367,7 +372,7 @@ function T:Payload()
 		for i = 1, #cmd.args do fields[#fields + 1] = cmd.args[i] end
 		if size + 1 + #Codec.Record(fields) <= limit then break end
 		table.remove(self.queue, 1)
-		ns:Fire("CommandResult", { id = cmd.id, ok = false, msg = "That was too long to send with this thread open. Shorten it and try again." })
+		ns:Fire("CommandResult", { id = cmd.id, ok = false, msg = "That was too long to send with this agent open. Shorten it and try again." })
 	end
 	for _, cmd in ipairs(self.queue) do
 		local fields = { "C", cmd.id, cmd.verb }

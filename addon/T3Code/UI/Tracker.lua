@@ -14,7 +14,7 @@ local WIDTH = 260
 -- "All Objectives" header when that's collapsed, or in the tracker's place when the
 -- tracker has nothing to show. It only anchors to the tracker and never runs inside
 -- it, so the tracker's secure quest-item buttons stay untouched. Dragging it (after
--- /t3 unlock) gives it a spot of its own; "Reset tracker" in Settings brings it back.
+-- /orca unlock) gives it a spot of its own; "Reset tracker" in Settings brings it back.
 local function AttachState()
 	local p = ns.db.settings.trackerPoint
 	if p then return "custom" end
@@ -149,7 +149,7 @@ function K:Create()
 			self.MinimizeButton:SetNormalAtlas(c and "common-button-list-plus" or "common-button-list-minus")
 		end
 	end
-	header.Text:SetText("T3 Code")
+	header.Text:SetText("Orca")
 	header:EnableMouse(true)
 	header:RegisterForDrag("LeftButton")
 	header:SetScript("OnDragStart", function()
@@ -198,7 +198,7 @@ function K:Refresh(resetPosition)
 	if state == "exhausted" then
 		notice = { text = "Live updates paused", sub = "Click to /reload", action = function() ReloadUI() end }
 	elseif #entries > 0 and (state == "stale" or state == "t3offline") then
-		notice = { text = "Connection lost", sub = state == "stale" and "Is t3code-wow running?" or "T3 Code is offline" }
+		notice = { text = "Connection lost", sub = state == "stale" and "Is t3code-wow running?" or "Orca is offline" }
 	end
 
 	if #entries == 0 and not notice and not s.trackerAlways then

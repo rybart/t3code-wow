@@ -137,6 +137,224 @@ do
 	ns.Store:Apply(data)
 end
 
+-- Orca (the bridge says `orca`): no Settle, screenshots, commands or usage tab. A chat
+-- agent takes replies; one in a terminal (its row's `ro`) is watch only. The rest of the
+-- checks run as with T3 Code, where all of those work.
+do
+	data.bridge = data.bridge or {}
+	data.bridge.orca = true
+	ns.Store:Apply(data)
+	ns.Main:Refresh()
+	local f = ns.Main.frame
+	check(f.Bar.Send:IsEnabled(), "Orca: Send is on for a chat agent")
+	check(f.Bar.Stop:IsShown() and f.Bar.Shot:IsShown() and not f.Bar.Insert:IsShown(), "Orca: Stop and screenshots stay, commands are hidden")
+	check(f.Bar.Ask:IsShown(), "Orca: the Ask button shows")
+	check(not f.Tabs[2]:IsShown(), "Orca: the usage tab is hidden")
+	check(not f.Pages.threads.Right.Header.Action:IsShown(), "Orca: Settle is hidden")
+	local row = ns.Store:Thread(ns.viewId)
+	row.ro = true
+	ns.Main:Refresh()
+	local queued = #ns.Transport.queue
+	ns.Main.composer._text = "hello"
+	ns.Main:Send()
+	check(#ns.Transport.queue == queued, "Orca: a reply to a terminal agent isn't sent")
+	check(not f.Bar.Send:IsEnabled() and not f.Bar.Stop:IsEnabled(), "Orca: Send and Stop are off for a terminal agent")
+	row.ro = nil
+	-- Ask: with no assistant yet the bridge is asked to start it; once it exists, Ask
+	-- opens its thread and sends the question there.
+	local view = ns.viewId
+	queued = #ns.Transport.queue
+	ns.Main:OpenAssistant("why is my game so dark?")
+	local last = ns.Transport.queue[#ns.Transport.queue]
+	check(#ns.Transport.queue == queued + 1 and last.verb == "assistant" and last.args[1]:find("^why is my game so dark%?\n\n%[Game context%]\nCharacter: ") ~= nil and ns.Main.pendingNew == last.id, "Ask with no assistant asks the bridge to start one, with the question and the character")
+	table.remove(ns.Transport.queue)
+	ns.Main.pendingNew = nil
+	data.bridge.asst = view
+	ns.Store:Apply(data)
+	ns.Main:SelectThread(data.threads[#data.threads].id)
+	ns.Main:OpenAssistant("and my gamma?")
+	last = ns.Transport.queue[#ns.Transport.queue]
+	check(ns.viewId == view and last.verb == "send" and last.args[1] == view and last.args[2]:find("^and my gamma%?\n\n%[Game context%]") ~= nil, "Ask opens the assistant and sends the question to it")
+	table.remove(ns.Transport.queue)
+	ns.Main:SelectThread(view)
+	data.bridge.asst = nil
+	data.bridge.orca = nil
+	ns.Store:Apply(data)
+	ns.Main:Refresh()
+	check(f.Bar.Shot:IsShown() and f.Tabs[2]:IsShown() and not f.Bar.Ask:IsShown(), "with T3 Code, the usage tab comes back and Ask goes")
+	ns.Main.composer._text = ""
+end
+
+-- Questions to the WoW Assistant carry game context: the character, each linked item's
+-- tooltip and what's worn in its slot. Game APIs are faked here; the client's own
+-- addons (Plumber, Leatrix, Syndicator) are where their shapes come from.
+do
+	local saved = {}
+	local function fake(name, value) saved[name] = _G[name] _G[name] = value end
+	local LINK_A = "|cnIQ4:|Hitem:1001::::::::60:::::|h[Helm of Testing]|h|r"
+	local LINK_WORN = "|cnIQ3:|Hitem:2002::::::::60:::::|h[Old Cap]|h|r"
+	fake("UnitName", function() return "Tester" end)
+	fake("UnitLevel", function() return 60 end)
+	fake("UnitRace", function() return "Night Elf" end)
+	fake("UnitClass", function() return "Druid" end)
+	fake("GetAverageItemLevel", function() return 182.4, 180.2 end)
+	fake("C_SpecializationInfo", { GetSpecialization = function() return 1 end, GetSpecializationInfo = function() return 102, "Balance", "", 0, "DAMAGER" end })
+	fake("INVTYPE_HEAD", "Head")
+	fake("C_Item", {
+		GetItemInfoInstant = function(item) return 1001, "Armor", "Leather", "INVTYPE_HEAD" end,
+		GetDetailedItemLevelInfo = function(item) return item:find("1001") and 200 or 190 end,
+	})
+	fake("C_TooltipInfo", { GetHyperlink = function(item)
+		local name = item:find("1001") and "Helm of Testing" or "Old Cap"
+		return { lines = { { leftText = name }, { leftText = "Head", rightText = "Leather" }, { leftText = "|cffffffff+120 Intellect|r" }, { leftText = '"Smells of pine."' }, { leftText = "Sell Price: 5g" } } }
+	end })
+	fake("GetInventoryItemLink", function(unit, slot) return slot == 1 and LINK_WORN or nil end)
+
+	local block = ns.GameContext.Build("Is " .. LINK_A .. " better than mine?")
+	check(block:find("^Is %[Helm of Testing%] better than mine%?\n\n%[Game context%]\n") ~= nil, "Ask: a link becomes [Name], and the context follows the marker")
+	check(block:find("Character: Tester, level 60 Night Elf Druid, spec Balance %(DAMAGER%), equipped item level 180", 1) ~= nil, "Ask: the character line names level, race, class, spec and item level")
+	check(block:find("Linked: [Helm of Testing] (item level 200, Head, Leather)", 1, true) ~= nil and block:find("  +120 Intellect", 1, true) ~= nil, "Ask: a linked item carries its level, slot, type and stats, without markup")
+	check(block:find("Equipped now: [Old Cap] (item level 190", 1, true) ~= nil, "Ask: what's worn in the same slot comes along")
+	check(not block:find("Smells of pine", 1, true) and not block:find("Sell Price", 1, true), "Ask: flavor text and sell price are left out")
+	-- Where they are, their target, tracked quests and talents.
+	fake("GetRealZoneText", function() return "Elwynn Forest" end)
+	fake("GetSubZoneText", function() return "Goldshire" end)
+	fake("C_Map", { GetBestMapForUnit = function() return 37 end, GetPlayerMapPosition = function() return { GetXY = function() return 0.42, 0.6588 end } end })
+	fake("UnitExists", function(u) return u == "target" end)
+	local realUnitName, realUnitLevel = UnitName, UnitLevel
+	fake("UnitName", function(u) return u == "target" and "Hogger" or "Tester" end)
+	fake("UnitLevel", function(u) return u == "target" and 11 or 60 end)
+	fake("UnitClassification", function() return "elite" end)
+	fake("UnitIsPlayer", function() return false end)
+	fake("UnitCreatureType", function() return "Humanoid" end)
+	fake("UnitIsEnemy", function() return true end)
+	fake("C_SuperTrack", { GetSuperTrackedQuestID = function() return 176 end })
+	fake("C_QuestLog", {
+		GetNumQuestWatches = function() return 2 end,
+		GetQuestIDForQuestWatchIndex = function(i) return i == 1 and 176 or 33 end,
+		GetTitleForQuestID = function(id) return id == 176 and "Wanted: \"Hogger\"" or "Wolves Across the Border" end,
+		ReadyForTurnIn = function(id) return id == 33 end,
+		GetQuestObjectives = function(id) return id == 176 and { { text = "Huge Gnoll Claw: 0/1", finished = false } } or { { text = "Tough Wolf Meat: 8/8", finished = true } } end,
+	})
+	fake("C_ClassTalents", { GetActiveConfigID = function() return 9 end, GetLastSelectedSavedConfigID = function() return 12 end })
+	fake("C_Traits", { GenerateImportString = function() return "BYGAAAAAAAAAAAAAAAAAAAAAAAAQ" end, GetConfigInfo = function() return { name = "Leveling" } end })
+	local full = ns.GameContext.Build("Where do I go?")
+	check(full:find("Location: Elwynn Forest, Goldshire (42.0, 65.9)", 1, true) ~= nil, "Ask: the location names zone, subzone and coordinates")
+	check(full:find("Target: Hogger (level 11, elite, Humanoid, hostile)", 1, true) ~= nil, "Ask: the target names level, rank, type and stance")
+	check(full:find('Quest: Wanted: "Hogger"\n  Huge Gnoll Claw: 0/1', 1, true) ~= nil and full:find("Quest: Wolves Across the Border (ready to turn in)\n  [done] Tough Wolf Meat: 8/8", 1, true) ~= nil, "Ask: tracked quests come with their objectives, the map's quest first")
+	check(full:find("Talents (Leveling): BYGAAAAAAAAAAAAAAAAAAAAAAAAQ", 1, true) ~= nil, "Ask: the talent loadout rides along as its import string")
+	local trimmed = ns.GameContext.Build("Where do I go?", function(m) return #m < #full - 40 end)
+	check(not trimmed:find("Talents", 1, true) and trimmed:find("Location:", 1, true) ~= nil, "Ask: talents go before the location when space is short")
+	_G.UnitName, _G.UnitLevel = realUnitName, realUnitLevel
+	fake("UnitExists", function() return false end)
+	fake("C_QuestLog", nil)
+	fake("C_ClassTalents", nil)
+	fake("GetRealZoneText", nil)
+	fake("C_Map", nil)
+	local cut = ns.GameContext.Build("Better? " .. LINK_A, function(m) return #m < 260 end)
+	check(#cut < 260 and cut:find("Linked: [Helm of Testing]", 1, true) ~= nil and not cut:find("+120 Intellect", 1, true), "Ask: a long block drops item lines to fit, keeping the items")
+	check(ns.GameContext.Clean("a || b " .. LINK_A) == "a || b [Helm of Testing]", "Ask: cleaning changes only links")
+
+	-- Shift-click: the game's InsertLink, hooked, fills the message box while it has focus.
+	fake("ChatFrameUtil", { InsertLink = function() return false end })
+	ns.GameContext.hooked = nil
+	ns.GameContext.HookLinks()
+	ns.Main.composer._text = "compare"
+	ns.Main.composer:SetFocus()
+	ChatFrameUtil.InsertLink(LINK_A)
+	check(ns.Main.composer:GetInputText() == "compare " .. LINK_A .. " ", "Ask: shift-clicking an item puts its link in the focused message box")
+	ns.Main.composer:ClearFocus()
+	ChatFrameUtil.InsertLink(LINK_WORN)
+	check(ns.Main.composer:GetInputText() == "compare " .. LINK_A .. " ", "Ask: without focus, the link goes where the game sends it, not here")
+
+	-- Sending to the assistant's thread carries the block; other agents get [Name] only.
+	data.bridge.asst = ns.viewId
+	data.bridge.orca = true
+	ns.Store:Apply(data)
+	ns.Main.composer._text = "Better? " .. LINK_A
+	ns.Main:Send()
+	local last = ns.Transport.queue[#ns.Transport.queue]
+	check(last.verb == "send" and last.args[2]:find("[Game context]", 1, true) ~= nil and not last.args[2]:find("|H", 1, true), "Ask: a question to the assistant carries the game context")
+	table.remove(ns.Transport.queue)
+	data.bridge.asst, data.bridge.orca = nil, nil
+	ns.Store:Apply(data)
+	ns.Main.composer._text = "Look at " .. LINK_A
+	ns.Main:Send()
+	last = ns.Transport.queue[#ns.Transport.queue]
+	check(last.args[2] == "Look at [Helm of Testing]", "Ask: other agents get the item's name, no context")
+	table.remove(ns.Transport.queue)
+	ns.Main.composer._text = ""
+	for name, value in pairs(saved) do _G[name] = value end
+	ns.GameContext.hooked = nil
+end
+
+-- Pull requests: a row's PR in a few words, a notice when its checks fail or it merges,
+-- once per PR though several agents share it.
+do
+	local S = ns.Store
+	check(S.PRChange({ n = 5, s = "open", c = "pending" }, { n = 5, s = "open", c = "failure" }) == "prfail", "PR: checks failing is a notice")
+	check(S.PRChange({ n = 5, s = "open", c = "pending" }, { n = 5, s = "open", c = "success" }) == "prpass", "PR: checks passing is a notice")
+	check(S.PRChange({ n = 5, s = "open", c = "success" }, { n = 5, s = "merged", c = "success" }) == "merged", "PR: merging is a notice")
+	check(S.PRChange(nil, { n = 5, s = "open", c = "failure" }) == nil and S.PRChange({ n = 5, s = "open", c = "failure" }, { n = 5, s = "open", c = "failure" }) == nil, "PR: a first sighting or no change is quiet")
+	check(S.PRText({ n = 12, s = "open", c = "failure" }):find("PR #12 failing", 1, true) ~= nil, "PR: a failing PR reads as failing")
+	local fired = {}
+	local off = ns:On("PRTransition", function(t, kind) table.insert(fired, kind) end)
+	-- Each snapshot is a fresh table, as one from the bridge would be.
+	local function withPR(pr)
+		local copy = {}
+		for k, v in pairs(data) do copy[k] = v end
+		copy.threads = {}
+		for i, t in ipairs(data.threads) do
+			local row = {}
+			for k, v in pairs(t) do row[k] = v end
+			if i <= 2 then row.pr = { n = pr.n, s = pr.s, c = pr.c } end
+			copy.threads[i] = row
+		end
+		return copy
+	end
+	ns.Store:Apply(withPR({ n = 77, s = "open", c = "pending" }))
+	ns.Store:Apply(withPR({ n = 77, s = "open", c = "failure" }))
+	check(#fired == 1 and fired[1] == "prfail", "PR: two agents on one PR make one notice")
+	ns.Store:Apply(data)
+	local a, b = data.threads[1], data.threads[2]
+	-- An Orca update that may break replies: one chat line, and the status line says so.
+	local warned = 0
+	ns:On("BridgeWarning", function() warned = warned + 1 end)
+	local function withWarn(warn)
+		local bridge = {}
+		for k, v in pairs(data.bridge) do bridge[k] = v end
+		bridge.warn = warn
+		local copy = {}
+		for k, v in pairs(data) do copy[k] = v end
+		copy.bridge = bridge
+		ns.Store:Apply(copy)
+	end
+	withWarn("Orca 1.5.0 changed how chats work")
+	withWarn("Orca 1.5.0 changed how chats work")
+	check(warned == 1, "Orca update: the warning is said once")
+	check(ns.Main:StatusLine():find("replies may fail", 1, true) ~= nil, "Orca update: the status line warns")
+	withWarn(nil)
+	ns.Store:Apply(data)
+	-- Logging in: a summary when agents finished or need you.
+	local printed
+	local realPrint, realAfter = ns.Print, C_Timer.After
+	ns.Print = function(msg) printed = msg end
+	C_Timer.After = function(_, fn) fn() end
+	local was = { a.s, a.un, b.s }
+	a.s, a.un, b.s = "open", true, "input"
+	ns.Store.liveSeen = nil
+	data.ack = { ui = ns.ui, seq = 0 }
+	ns.Store:Apply(data)
+	check(printed and printed:find("While you were away", 1, true) ~= nil and printed:find("1 agent finished", 1, true) ~= nil and printed:find("1 needs you", 1, true) ~= nil, "Away: the first live update sums up what finished and what needs you")
+	printed = nil
+	ns.Store:Apply(data)
+	check(printed == nil, "Away: only once per session")
+	ns.Print, C_Timer.After = realPrint, realAfter
+	a.s, a.un, b.s = was[1], was[2], was[3]
+	data.ack = nil
+	ns.Store:Apply(data)
+end
+
 -- Send a message: queued, echoed, and present in the strip payload.
 -- A message too long for one frame would never go and would hold up the queue behind it.
 do
@@ -224,8 +442,9 @@ do
 end
 check(ns.Main:ChosenNewModel() == nil and ns.Main:NewThreadModel() ~= nil, "no pick yet: the picker shows T3's default but sends none")
 -- Pick the last model that has reasoning levels (any model when none has).
-local pick
+local pick, hasLevels
 for _, o in ipairs(Choices(hdr.Model)) do
+	if ns.Store:EffortOptions("", o.value) then hasLevels = true end
 	if not pick or ns.Store:EffortOptions("", o.value) then pick = o end
 end
 ns.Main:PickModel(pick.value)
@@ -239,12 +458,20 @@ if hdr.Effort:IsShown() then
 	check(ns.Main:ChosenNewEffort() == nil and hdr.Effort.value == inherited, "no level picked: the picker shows the level the thread would get: " .. inherited)
 	ns.Main:PickEffort(level)
 	check(ns.db.efforts[ns.Main.newProject] == level and hdr.Effort.value == level, "picked level remembered for the project: " .. level)
-else
+elseif hasLevels then
 	check(false, "the reasoning picker shows for " .. pick.label)
+else
+	print("skip - no model offers reasoning levels (Orca's agents don't)")
 end
-do
-	local wt
-	for _, cb in ipairs(ns.Settings.checks or {}) do if cb.key == "newWorktree" then wt = cb end end
+local wtSetting
+for _, cb in ipairs(ns.Settings.checks or {}) do if cb.key == "newWorktree" then wtSetting = cb end end
+if not wtSetting then
+	print("skip - no worktree setting (the Orca fork drops it)")
+	ns.Main.composer._text = "Build a thing"
+	ns.Main:Send()
+end
+if wtSetting then
+	local wt = wtSetting
 	check(wt and not wt:GetChecked(), "worktree is a setting, off by default")
 	wt:SetChecked(true) -- the stub's Click runs the handler but doesn't flip the box
 	wt:Click()
@@ -1012,7 +1239,7 @@ check(ns.Launcher.chord == "PADLTRIGGER-PADRTRIGGER-PADBACK", "controller shortc
 check(next(Stub.overrides) == nil, "no key bindings overridden (Forever's controller mode ignores them)")
 GameMenuFrame:InitButtons()
 local entry
-for _, b in ipairs(GameMenuFrame.buttons) do if b.text == "T3 Code" then entry = b end end
+for _, b in ipairs(GameMenuFrame.buttons) do if b.text == "Orca" then entry = b end end
 check(entry and entry.layoutIndex == 4.5, "game menu entry sits above Log Out")
 _G.HideUIPanel = function() end
 entry.cb()
