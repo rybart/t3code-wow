@@ -146,6 +146,9 @@ local function Notify(t, kind, quietSound)
 end
 
 ns:On("ThreadTransition", function(t, before, after)
+	-- The WoW Assistant stays quiet: its answers show in the Ask panel, and a mark on its
+	-- icon says when one came in while the panel was closed.
+	if ns.Store:IsAssistant(t.id) then return end
 	-- Waiting (on a watched PR, another thread) isn't done yet: tell the player when the wait ends.
 	local finished = (before == "working" or before == "waiting") and (after == "open" or after == "failed")
 	local needsYou = (after == "input" or after == "plan") and before ~= after
@@ -184,7 +187,9 @@ ns:On("FirstLive", function()
 	if not ns.db.settings.awaySummary then return end
 	local finished, needs, working = 0, 0, 0
 	for _, t in ipairs(ns.Store.data.threads or {}) do
-		if t.s == "input" or t.s == "plan" then needs = needs + 1
+		if ns.Store:IsAssistant(t.id) then
+			-- not one of the player's agents: it has the Ask panel
+		elseif t.s == "input" or t.s == "plan" then needs = needs + 1
 		elseif t.s == "working" or t.s == "waiting" then working = working + 1
 		elseif t.un and (t.s == "open" or t.s == "failed") then finished = finished + 1 end
 	end

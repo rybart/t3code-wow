@@ -215,12 +215,14 @@ function K:Refresh(resetPosition)
 
 	local entries = {}
 	local hidden = s.trackerHidden or {}
+	-- Not the WoW Assistant (it has the Ask panel), nor workspaces the player hid.
+	local function shown(t) return not hidden[t.p or ""] and not ns.Store:IsAssistant(t.id) end
 	for _, t in ipairs(ns.Store:Active()) do
-		if not hidden[t.p or ""] then table.insert(entries, t) end
+		if shown(t) then table.insert(entries, t) end
 	end
 	for _, t in ipairs(ns.Store.data.threads) do
 		if #entries >= MAX_LINES then break end
-		if (t.s == "open" or t.s == "failed") and t.un and not hidden[t.p or ""] then table.insert(entries, t) end
+		if (t.s == "open" or t.s == "failed") and t.un and shown(t) then table.insert(entries, t) end
 	end
 	local state = ns.Transport:BridgeState()
 	self.bridgeState = state

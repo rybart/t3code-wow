@@ -886,6 +886,7 @@ export class Bridge {
       if (before !== status) {
         this.markDirty('important');
         if (t.lineage?.parentThreadId) return; // no announcements for subagent threads
+        if (t.id === this.assistant?.threadId()) return; // nor for the WoW Assistant: it has the Ask panel
         // A snoozed thread stays quiet: the player asked not to hear about it yet.
         if (status === 'snoozed') return;
         if (BUSY.has(before) && !BUSY.has(status)) this.announce(t, status);

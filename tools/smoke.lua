@@ -410,6 +410,48 @@ do
 	ns.Store:Apply(data)
 end
 
+-- The WoW Assistant stays quiet: no toast, chat line or sound when it answers, not in
+-- the tracker, not in the login summary. Its icon gets a mark instead.
+do
+	data.bridge.orca = true
+	local t = data.threads[1]
+	data.bridge.asst = t.id
+	local saved = { s = t.s, un = t.un }
+	t.s = "working"
+	ns.Store:Apply(data)
+	ns.db.settings.tracker = true
+	ns.Tracker:Refresh()
+	local listed = false
+	for _, b in ipairs(ns.Tracker.frame.Lines or {}) do if b:IsShown() ~= false and b.thread and b.thread.id == t.id then listed = true end end
+	check(not listed, "Assistant: not in the tracker while it works")
+	-- It finishes: nothing printed, no toast, but the Ask icon gets its mark.
+	for _, f in ipairs(ns.Toasts.frames) do f:Hide() end
+	local printed = #Stub.printed
+	local copy = {}
+	for k, v in pairs(data) do copy[k] = v end
+	copy.threads = {}
+	for i, row in ipairs(data.threads) do
+		local r = {}
+		for k, v in pairs(row) do r[k] = v end
+		if i == 1 then r.s, r.un = "open", true end
+		copy.threads[i] = r
+	end
+	ns.AskPanel:CreateIcon()
+	ns.AskPanel.icon.Badge:Hide()
+	ns.Store:Apply(copy)
+	local toasted = false
+	for _, f in ipairs(ns.Toasts.frames) do if f:IsShown() then toasted = true end end
+	check(#Stub.printed == printed and not toasted, "Assistant: finishing makes no toast or chat line")
+	check(ns.AskPanel.icon.Badge:IsShown(), "Assistant: its icon gets the mark instead")
+	ns.Tracker:Refresh()
+	listed = false
+	for _, b in ipairs(ns.Tracker.frame.Lines or {}) do if b:IsShown() ~= false and b.thread and b.thread.id == t.id then listed = true end end
+	check(not listed, "Assistant: not in the tracker when it has an unread answer")
+	t.s, t.un = saved.s, saved.un
+	data.bridge.asst, data.bridge.orca = nil, nil
+	ns.Store:Apply(data)
+end
+
 -- Pull requests: a row's PR in a few words, a notice when its checks fail or it merges,
 -- once per PR though several agents share it.
 do
