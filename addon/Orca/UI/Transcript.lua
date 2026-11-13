@@ -173,9 +173,9 @@ function T:Create(parent, header, composer)
 
 	local view = CreateScrollBoxListLinearView(4, 8, 0, 0, 4)
 	view:SetElementFactory(function(factory, ed)
-		if ed.kind == "msg" then factory("T3CodeMessageRowTemplate", InitMessage)
-		elseif ed.kind == "option" then factory("T3CodeOptionRowTemplate", InitOption)
-		else factory("T3CodeNoteRowTemplate", InitNote) end
+		if ed.kind == "msg" then factory("OrcaMessageRowTemplate", InitMessage)
+		elseif ed.kind == "option" then factory("OrcaOptionRowTemplate", InitOption)
+		else factory("OrcaNoteRowTemplate", InitNote) end
 	end)
 	view:SetElementExtentCalculator(function(_, ed) return ed.height or 24 end)
 	ScrollUtil.InitScrollBoxListWithScrollBar(scrollBox, scrollBar, view)

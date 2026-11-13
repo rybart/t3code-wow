@@ -11,8 +11,8 @@
 #
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/ryanrhughes/t3code-wow/main/install.ps1))) --wow "D:\Games\World of Warcraft"
 #
-# Copies the bridge and addon to %USERPROFILE%\.local\share\t3code-wow, puts a
-# `t3code-wow` command on your PATH, then runs `t3code-wow install`, which installs the
+# Copies the bridge and addon to %USERPROFILE%\.local\share\orca-wow, puts a
+# `orca-wow` command on your PATH, then runs `orca-wow install`, which installs the
 # addon into the game, gives the bridge a T3 Code session, starts it as a logon task and
 # walks you through the first launch. No step needs administrator rights.
 #
@@ -26,9 +26,9 @@ try {
     $ProgressPreference = 'SilentlyContinue'
 
     $repo = 'ryanrhughes/t3code-wow'
-    $ref = if ($env:T3CODE_WOW_REF) { $env:T3CODE_WOW_REF } else { 'main' }
+    $ref = if ($env:ORCA_WOW_REF) { $env:ORCA_WOW_REF } else { 'main' }
     $dataHome = if ($env:XDG_DATA_HOME) { $env:XDG_DATA_HOME } else { Join-Path $env:USERPROFILE '.local\share' }
-    $dest = Join-Path $dataHome 't3code-wow'
+    $dest = Join-Path $dataHome 'orca-wow'
     # Windows puts this folder on every user's PATH, so nobody's PATH has to be edited.
     $bin = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps'
 
@@ -48,10 +48,10 @@ try {
     $tmp = $null
     try {
       if (-not $source) {
-        $tmp = Join-Path ([IO.Path]::GetTempPath()) ('t3code-wow-' + [Guid]::NewGuid().ToString('N'))
+        $tmp = Join-Path ([IO.Path]::GetTempPath()) ('orca-wow-' + [Guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $tmp | Out-Null
         Write-Host "Downloading T3 Code for World of Warcraft ($ref)..."
-        $url = if ($env:T3CODE_WOW_ZIP) { $env:T3CODE_WOW_ZIP } else { "https://codeload.github.com/$repo/zip/$ref" }
+        $url = if ($env:ORCA_WOW_ZIP) { $env:ORCA_WOW_ZIP } else { "https://codeload.github.com/$repo/zip/$ref" }
         $zip = Join-Path $tmp 'source.zip'
         try {
           Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zip
@@ -80,19 +80,19 @@ try {
 
     # The command: a one-line batch file, because a symlink needs Developer Mode or an
     # administrator. `(goto)` ends the batch file before Node starts, so cmd.exe never
-    # comes back to read it. That lets `t3code-wow uninstall` delete this file while it
+    # comes back to read it. That lets `orca-wow uninstall` delete this file while it
     # runs, and makes Node's exit code the command's (both measured). The path starts
     # from %USERPROFILE% where it can, so a profile folder with letters the console's
     # code page lacks still works.
-    $cli = Join-Path $dest 'bridge\bin\t3code-wow.js'
-    $shim = Join-Path $bin 't3code-wow.cmd'
+    $cli = Join-Path $dest 'bridge\bin\orca-wow.js'
+    $shim = Join-Path $bin 'orca-wow.cmd'
     $target = $cli.Replace('%', '%%')
     if ($cli.StartsWith("$env:USERPROFILE\", [StringComparison]::OrdinalIgnoreCase)) {
       $target = '%USERPROFILE%' + $cli.Substring($env:USERPROFILE.Length).Replace('%', '%%')
     }
     Set-Content -LiteralPath $shim -Encoding Oem -Value ('@(goto) 2>nul & node "{0}" %*' -f $target)
     if (($env:PATH -split ';' | ForEach-Object { $_.TrimEnd('\') }) -notcontains $bin) {
-      Write-Host "Note: $bin isn't on your PATH, so run t3code-wow as $shim (or add $bin to PATH)."
+      Write-Host "Note: $bin isn't on your PATH, so run orca-wow as $shim (or add $bin to PATH)."
     }
 
     # PowerShell 5.1 passes a quoted argument that ends in a backslash wrongly (measured:

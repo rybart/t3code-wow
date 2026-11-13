@@ -36,7 +36,7 @@ end
 
 function M:Create()
 	if self.frame then return self.frame end
-	local f = CreateFrame("Frame", "T3CodeFrame", UIParent, "ButtonFrameTemplate")
+	local f = CreateFrame("Frame", "OrcaFrame", UIParent, "ButtonFrameTemplate")
 	self.frame = f
 	f:SetSize(WIDTH, HEIGHT)
 	f:SetPoint("CENTER", 0, 20)
@@ -48,7 +48,7 @@ function M:Create()
 	f:Hide()
 	f:SetTitle("Orca")
 	f:SetPortraitToAsset(ns.media .. "portrait")
-	tinsert(UISpecialFrames, "T3CodeFrame")
+	tinsert(UISpecialFrames, "OrcaFrame")
 
 	-- Drag by the title bar.
 	local drag = CreateFrame("Frame", nil, f)
@@ -229,7 +229,7 @@ function M:CreateThreadsPage(page)
 	composer:SetHeight(COMPOSER_H)
 	right.ComposerInset = composer
 
-	local box = CreateFrame("Frame", nil, composer, "T3CodeComposerTemplate")
+	local box = CreateFrame("Frame", nil, composer, "OrcaComposerTemplate")
 	box:SetPoint("TOPLEFT", 8, -6)
 	box:SetPoint("BOTTOMRIGHT", -8, 18)
 	box:RegisterCallback("OnEnterPressed", function()
@@ -523,7 +523,7 @@ function M:OpenCustomSnooze()
 	local p = self.snoozePanel
 	if not p then
 		local header = self.frame.Pages.threads.Right.Header
-		p = CreateFrame("Frame", "T3CodeSnoozePanel", self.frame)
+		p = CreateFrame("Frame", "OrcaSnoozePanel", self.frame)
 		p:SetFrameStrata("FULLSCREEN_DIALOG")
 		p:SetToplevel(true)
 		p:SetSize(272, 112)
@@ -560,7 +560,7 @@ function M:OpenCustomSnooze()
 		p.Hint:SetText("Try 45m, 3h, 2d, 5pm, tomorrow 9am or fri 3pm.")
 		p:SetScript("OnHide", function() p.Box:ClearFocus() end)
 		p:Hide()
-		tinsert(UISpecialFrames, "T3CodeSnoozePanel")
+		tinsert(UISpecialFrames, "OrcaSnoozePanel")
 		self.snoozePanel = p
 	end
 	p.threadId = t.id
@@ -815,8 +815,8 @@ end
 
 local LINK_TEXT = {
 	connected = { "green", "Connected" },
-	waiting = { "orange", "Waiting for the bridge… (run t3code-wow install on your desktop)" },
-	stale = { "red", "Bridge not responding — is t3code-wow running?" },
+	waiting = { "orange", "Waiting for the bridge… (run orca-wow install on your desktop)" },
+	stale = { "red", "Bridge not responding — is orca-wow running?" },
 	t3offline = { "red", "Bridge connected, but Orca is offline" },
 	exhausted = { "orange", "Live updates paused — /reload to resume" },
 }
@@ -824,7 +824,7 @@ local LINK_TEXT = {
 function M:StatusLine()
 	local T = ns.Transport
 	if T.slotError == "MISSING" then
-		return ns.Color("red", "Live-update files missing — run t3code-wow install, then restart WoW")
+		return ns.Color("red", "Live-update files missing — run orca-wow install, then restart WoW")
 	end
 	local state = T:BridgeState()
 	local entry = LINK_TEXT[state] or LINK_TEXT.waiting

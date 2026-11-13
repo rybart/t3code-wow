@@ -1,0 +1,17 @@
+<Bindings>
+	<Binding name="ORCA_TOGGLE" header="ORCA" category="ADDONS">
+		Orca_Binding("toggle")
+	</Binding>
+	<Binding name="ORCA_NEW" category="ADDONS">
+		Orca_Binding("new")
+	</Binding>
+	<Binding name="ORCA_TALK" runOnUp="true" category="ADDONS">
+		Orca_Binding("talk", keystate)
+	</Binding>
+	<Binding name="ORCA_READ" category="ADDONS">
+		Orca_Binding("read")
+	</Binding>
+	<Binding name="ORCA_HUSH" category="ADDONS">
+		Orca_Binding("hush")
+	</Binding>
+</Bindings>

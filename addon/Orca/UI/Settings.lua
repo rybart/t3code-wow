@@ -136,11 +136,11 @@ function S:Refresh()
 	local T = ns.Transport
 	local b = ns.Store.data.bridge or {}
 	local lines = {
-		"Bridge: " .. (b.version and ns.Color("green", "t3code-wow " .. b.version) or ns.Color("red", "not heard from")),
+		"Bridge: " .. (b.version and ns.Color("green", "orca-wow " .. b.version) or ns.Color("red", "not heard from")),
 		"Orca: " .. (b.t3 == "connected" and ns.Color("green", "connected" .. (b.server and (" (" .. b.server .. ")") or "")) or ns.Color("red", b.t3 or "unknown"))
 			.. (b.t3err and ns.Color("grey", " — " .. b.t3err) or ""),
 		(function()
-			if not b.envs then return "Machines: this computer only " .. ns.Color("grey", "(add more with t3code-wow env add <host>)") end
+			if not b.envs then return "Machines: this computer only " .. ns.Color("grey", "(add more with orca-wow env add <host>)") end
 			local parts = {}
 			for _, e in ipairs(b.envs) do
 				local ok = e.state == "connected"

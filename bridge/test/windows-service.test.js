@@ -93,7 +93,7 @@ function record(box, running) {
 }
 
 test('the task runs its command behind conhost with every part quoted, and a folder called "Tom & Jerry" stays whole', () => {
-  const command = ['C:\\Program Files\\nodejs\\node.exe', 'C:\\Users\\Tom & Jerry\\.local\\share\\t3code-wow\\bridge\\bin\\t3code-wow.js', 'supervise'];
+  const command = ['C:\\Program Files\\nodejs\\node.exe', 'C:\\Users\\Tom & Jerry\\.local\\share\\orca-wow\\bridge\\bin\\orca-wow.js', 'supervise'];
   const xml = taskXml({ user: 'PC\\Tom & <Jerry>', command });
   assert.doesNotMatch(xml, /&(?!amp;|lt;|gt;)/, 'every & in the definition is escaped');
   const text = (tag) => new RegExp(`<${tag}>(.*?)</${tag}>`).exec(xml)[1].replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
@@ -198,7 +198,7 @@ test('a bridge that outlived its supervisor: the next supervisor waits for it to
   }
 });
 
-const throwaway = () => `t3code-wow-test-${process.pid}-${Date.now()}`;
+const throwaway = () => `orca-wow-test-${process.pid}-${Date.now()}`;
 
 function ask(script, env) {
   return spawnSync(POWERSHELL, ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', windowsHide: true, env: { ...process.env, ...env } }).stdout.trim();

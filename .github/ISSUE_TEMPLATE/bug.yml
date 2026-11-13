@@ -11,8 +11,8 @@ body:
     id: versions
     attributes:
       label: Versions
-      description: Omarchy (`omarchy-version`) or Windows (`winver`), T3 Code Nightly (`t3 --version`), t3code-wow (`t3code-wow status`), and your controller if it's involved.
-      placeholder: e.g. Omarchy 4.5.0, t3 v0.1.7-nightly.20261102, t3code-wow 0.1.0, Xbox Series controller
+      description: Omarchy (`omarchy-version`) or Windows (`winver`), T3 Code Nightly (`t3 --version`), orca-wow (`orca-wow status`), and your controller if it's involved.
+      placeholder: e.g. Omarchy 4.5.0, t3 v0.1.7-nightly.20261102, orca-wow 0.1.0, Xbox Series controller
     validations:
       required: true
 
@@ -28,7 +28,7 @@ body:
     id: diagnostics
     attributes:
       label: Diagnostics
-      description: Output of `t3code-wow status --log`, and the text from `/t3 report` in game.
+      description: Output of `orca-wow status --log`, and the text from `/t3 report` in game.
       render: text
 
   - type: textarea

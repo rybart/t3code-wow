@@ -1,6 +1,6 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\..\Blizzard_SharedXML\UI.xsd">
 	<!-- The message box: Enter sends (or takes the highlighted suggestion), Shift+Enter adds a line (handled in MainFrame.lua). -->
-	<Frame name="T3CodeComposerTemplate" inherits="ScrollingEditBoxTemplate" virtual="true">
+	<Frame name="OrcaComposerTemplate" inherits="ScrollingEditBoxTemplate" virtual="true">
 		<KeyValues>
 			<KeyValue key="useDefaultEnterHandling" value="false" type="boolean"/>
 			<KeyValue key="maxLetters" value="2000" type="number"/>
@@ -10,11 +10,11 @@
 
 	<!-- One template per kind of list row: ScrollBox recycles rows per template, so
 	     sharing a plain "Frame" between kinds would leave one kind's text on another. -->
-	<Frame name="T3CodeMessageRowTemplate" virtual="true"/>
-	<Frame name="T3CodeNoteRowTemplate" virtual="true"/>
-	<Button name="T3CodeOptionRowTemplate" virtual="true"/>
-	<Button name="T3CodeThreadRowTemplate" virtual="true"/>
-	<Button name="T3CodeGroupHeaderTemplate" virtual="true"/>
-	<Frame name="T3CodeEmptyRowTemplate" virtual="true"/>
-	<Button name="T3CodeDropdownRowTemplate" virtual="true"/>
+	<Frame name="OrcaMessageRowTemplate" virtual="true"/>
+	<Frame name="OrcaNoteRowTemplate" virtual="true"/>
+	<Button name="OrcaOptionRowTemplate" virtual="true"/>
+	<Button name="OrcaThreadRowTemplate" virtual="true"/>
+	<Button name="OrcaGroupHeaderTemplate" virtual="true"/>
+	<Frame name="OrcaEmptyRowTemplate" virtual="true"/>
+	<Button name="OrcaDropdownRowTemplate" virtual="true"/>
 </Ui>

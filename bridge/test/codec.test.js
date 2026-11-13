@@ -20,8 +20,8 @@ const lua = ['lua5.1', 'luajit', 'lua'].find((bin) => {
 function luaCells(seq, payloadHex) {
   const script = `
     local ns = {}
-    local chunk = assert(loadfile(${JSON.stringify(path.join(root, 'addon/T3Code/Core/Codec.lua'))}))
-    chunk("T3Code", ns)
+    local chunk = assert(loadfile(${JSON.stringify(path.join(root, 'addon/Orca/Core/Codec.lua'))}))
+    chunk("Orca", ns)
     local hex = ${JSON.stringify(payloadHex)}
     local s = hex:gsub("..", function(h) return string.char(tonumber(h, 16)) end)
     local cells = ns.Codec.Encode(${seq}, s)
@@ -101,8 +101,8 @@ test('Lua encoder matches JS encoder', { skip: !lua && 'no lua interpreter' }, (
 function addonStrip(keys) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't3wow-slot-'));
   const slot = path.join(dir, 'Inbox.lua');
-  fs.writeFileSync(slot, luaAssignment('T3Code_Inbox', { v: 1, gen: 5, now: 1, nextSig: 1, key: keys.hex, threads: [], projects: [], usage: [], bridge: {} }));
-  const [cells, , origin] = execFileSync(lua, ['tools/strip_e2e.lua', 'addon/T3Code', slot, 'thread-42', 'run the tests'], { cwd: root }).toString().trim().split('\n');
+  fs.writeFileSync(slot, luaAssignment('Orca_Inbox', { v: 1, gen: 5, now: 1, nextSig: 1, key: keys.hex, threads: [], projects: [], usage: [], bridge: {} }));
+  const [cells, , origin] = execFileSync(lua, ['tools/strip_e2e.lua', 'addon/Orca', slot, 'thread-42', 'run the tests'], { cwd: root }).toString().trim().split('\n');
   fs.rmSync(dir, { recursive: true, force: true });
   const [ox, oy] = origin.split(',').map(Number);
   return { cells: [...cells].map(Number), ox, oy };

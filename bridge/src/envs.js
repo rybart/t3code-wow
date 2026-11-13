@@ -101,7 +101,7 @@ export function remoteTokenProvider(env, { log = () => {}, label } = {}) {
     if (!data?.token || force || (expires && expires - Date.now() < RENEW_BEFORE_MS)) {
       if (!env.ssh) {
         if (data?.token) return data.token;
-        throw new Error(`${env.label}: no token; run t3code-wow env add ${env.label}`);
+        throw new Error(`${env.label}: no token; run orca-wow env add ${env.label}`);
       }
       if (!minting) {
         log(`${env.label}: ${data?.token ? 'renewing' : 'minting'} its T3 session token over SSH`);

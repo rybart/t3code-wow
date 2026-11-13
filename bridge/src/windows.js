@@ -50,7 +50,7 @@ const HELPER_SRC = fileURLToPath(new URL('./windows-helper.cs', import.meta.url)
 
 // A command string, not a script file, so the execution policy doesn't apply. The
 // path travels in the environment, so no path needs quoting in PowerShell's syntax.
-const BOOT = "$ErrorActionPreference = 'Stop'; Add-Type -LiteralPath $env:T3WOW_HELPER_SRC -ReferencedAssemblies System.Drawing,System.Web.Extensions; [T3CodeWow.Helper]::Run()";
+const BOOT = "$ErrorActionPreference = 'Stop'; Add-Type -LiteralPath $env:T3WOW_HELPER_SRC -ReferencedAssemblies System.Drawing,System.Web.Extensions; [OrcaWow.Helper]::Run()";
 
 const READY_TIMEOUT_MS = 15000; // compiling takes 0.3 to 1.3 s here; a cold disk or a virus scan can take longer
 const WINDOW_CACHE_MS = 2000;
@@ -140,7 +140,7 @@ const LIFECYCLE = {
  *
  * The child and its pipes never keep this process alive. While the helper is starting
  * or a request is in flight, the time limit on it does. So a command like
- * `t3code-wow install` that asked one question exits when it's done instead of
+ * `orca-wow install` that asked one question exits when it's done instead of
  * hanging on a helper nobody remembered to stop.
  */
 export class Desktop {

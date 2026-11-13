@@ -1,4 +1,4 @@
-// Strip encryption, the bridge's end of addon/T3Code/Core/Crypto.lua.
+// Strip encryption, the bridge's end of addon/Orca/Core/Crypto.lua.
 //
 // The strip is on screen, so anyone watching a stream or recording could decode it.
 // Frames therefore carry
@@ -34,8 +34,8 @@ export function loadOrCreateKey(stateDir) {
 
 export function deriveKeys(master) {
   const hmac = (label) => crypto.createHmac('sha256', master).update(label).digest();
-  const enc = hmac('t3code-wow strip encryption');
-  const mac = hmac('t3code-wow strip authentication');
+  const enc = hmac('orca-wow strip encryption');
+  const mac = hmac('orca-wow strip authentication');
   // What the addon gets in every snapshot.
   return { enc, mac, hex: enc.toString('hex') + mac.toString('hex') };
 }

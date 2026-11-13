@@ -38,7 +38,7 @@ end
 
 function B:Create()
 	if self.button or not Minimap then return end
-	local b = CreateFrame("Button", "T3CodeMinimapButton", Minimap)
+	local b = CreateFrame("Button", "OrcaMinimapButton", Minimap)
 	b:SetSize(31, 31)
 	b:SetFrameStrata("MEDIUM")
 	b:SetFrameLevel(Minimap:GetFrameLevel() + 8)
@@ -52,7 +52,7 @@ function B:Create()
 	bg:SetPoint("TOPLEFT", 7, -5)
 
 	local icon = b:CreateTexture(nil, "ARTWORK")
-	icon:SetTexture("Interface\\AddOns\\T3Code\\Media\\minimap")
+	icon:SetTexture("Interface\\AddOns\\Orca\\Media\\minimap")
 	icon:SetSize(18, 18)
 	icon:SetPoint("TOPLEFT", 7, -6)
 	b.Icon = icon

@@ -15,7 +15,7 @@ import { snoozedUntil } from './snooze.js';
 export const PROTOCOL = 2;
 
 export function t3Home() {
-  return process.env.T3CODE_HOME || path.join(os.homedir(), '.t3');
+  return process.env.ORCA_HOME || path.join(os.homedir(), '.t3');
 }
 
 export function readRuntime() {

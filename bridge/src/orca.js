@@ -20,7 +20,7 @@ import os from 'node:os';
 import { OrcaRpc, sessionIdOf, paneKeyOf } from './orca-rpc.js';
 
 // Where screenshots from the game are kept for Orca to read, and how many.
-const SHOT_DIR = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local/state'), 't3code-wow', 'shots');
+const SHOT_DIR = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local/state'), 'orca-wow', 'shots');
 const KEEP_SHOTS = 30;
 
 export const POLL_MS = 2000;

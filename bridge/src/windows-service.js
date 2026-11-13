@@ -27,7 +27,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { replaceFile, sleepSync } from './slots.js';
 import { POWERSHELL, whatPowerShellSaid } from './windows.js';
 
-const TASK = 't3code-wow';
+const TASK = 'orca-wow';
 const SYSTEM32 = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32');
 const LOG_ROTATE_BYTES = 1024 * 1024;
 const CONHOST_GONE_MS = 1000; // measured: how long after the task is stopped conhost is gone
@@ -127,10 +127,10 @@ const UNREGISTER = 'Stop-ScheduledTask -TaskName $env:T3WOW_TASK -ErrorAction Si
  * place, and none of them starts a bridge while an earlier one is still running.
  *
  * @param {object} options
- * @param {string} options.file  Where the definition is kept (CONFIG_DIR/t3code-wow.task.xml).
+ * @param {string} options.file  Where the definition is kept (CONFIG_DIR/orca-wow.task.xml).
  *   The folder Task Scheduler keeps its own copy in can't be listed without
  *   administrator rights (measured), so it can't serve as the "installed" marker.
- * @param {string[]} options.command  What the task runs: [node, t3code-wow.js, 'supervise'].
+ * @param {string[]} options.command  What the task runs: [node, orca-wow.js, 'supervise'].
  * @param {string} options.runningFile  The supervisor's record of who is running (see below).
  * @param {string} [options.name]  The task's name. Tests register theirs under another one.
  * @param {string} [options.user]
@@ -289,7 +289,7 @@ const stamp = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
  * lands there too. The supervisor's own lines carry the date, which the bridge's don't.
  *
  * @param {object} options
- * @param {string[]} options.command  [node, t3code-wow.js, 'run']. The child also gets
+ * @param {string[]} options.command  [node, orca-wow.js, 'run']. The child also gets
  *   `--stop-with <stopWithPid>`.
  * @param {string} options.logFile
  * @param {string} options.runningFile  Where this supervisor records who is running.

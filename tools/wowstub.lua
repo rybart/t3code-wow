@@ -1,4 +1,4 @@
--- A permissive stand-in for the WoW client API, enough to load the T3Code addon in
+-- A permissive stand-in for the WoW client API, enough to load the Orca addon in
 -- plain Lua 5.1 and drive it through login, snapshots and UI interaction.
 -- Unknown methods on frames are no-ops; known getters return plausible values.
 
@@ -179,7 +179,7 @@ local TEMPLATE_CHILDREN = {
 
 -- The strip's cell values (0..7) as currently drawn, in order.
 function Stub.StripCells()
-	local strip = _G.T3CodeLinkStrip
+	local strip = _G.OrcaLinkStrip
 	local out = {}
 	if not strip or strip._shown == false then return out end
 	for _, f in ipairs(Stub.frames) do
@@ -193,7 +193,7 @@ end
 -- Where the strip's top-left corner sits, as x, y offsets down and right from the game's
 -- top-left corner. The strip is scaled so that one of its units is one physical pixel.
 function Stub.StripOrigin()
-	local strip = _G.T3CodeLinkStrip
+	local strip = _G.OrcaLinkStrip
 	for _, pt in ipairs(strip and strip._points or {}) do
 		if pt[1] == "TOPLEFT" and pt[2] == _G.UIParent then return pt[4] or 0, -(pt[5] or 0) end
 	end
@@ -295,13 +295,13 @@ Stub.loadedSlots = {}
 _G.C_AddOns = {
 	GetAddOnMetadata = function(_, key) return key == "Version" and "0.5.0" or nil end,
 	DoesAddOnExist = function(name)
-		local n = tonumber(name:match("T3Code_S(%d+)"))
+		local n = tonumber(name:match("Orca_S(%d+)"))
 		return n ~= nil and n <= Stub.slotCount
 	end,
 	IsAddOnLoaded = function(name) return Stub.loadedSlots[name] or name == "Blizzard_ObjectiveTracker" end,
 	LoadAddOn = function(name)
 		Stub.loadedSlots[name] = true
-		local n = tonumber(name:match("T3Code_S(%d+)"))
+		local n = tonumber(name:match("Orca_S(%d+)"))
 		local file = Stub.slotData[n] or Stub.slotData.default
 		if file then
 			local chunk = assert(loadfile(file))

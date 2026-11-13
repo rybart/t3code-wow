@@ -219,7 +219,7 @@ test('screenshot: the JPEG the helper made, or the reason there is none', async 
 
 test('the helper places the strip where the addon draws it and the decoder looks, inside the corner the bridge grabs', () => {
   const helper = fs.readFileSync(fileURLToPath(new URL('../src/windows-helper.cs', import.meta.url)), 'utf8');
-  const addon = fs.readFileSync(fileURLToPath(new URL('../../addon/T3Code/Core/Transport.lua', import.meta.url)), 'utf8');
+  const addon = fs.readFileSync(fileURLToPath(new URL('../../addon/Orca/Core/Transport.lua', import.meta.url)), 'utf8');
   const [cell, perRow, rows, inset] = helper.match(/const int CELL = (\d+), CELLS_PER_ROW = (\d+), MAX_ROWS = (\d+), INSET = (\d+);/).slice(1).map(Number);
   assert.deepEqual([cell, perRow, rows, inset], [Number(addon.match(/^local CELL = (\d+)/m)[1]), CELLS_PER_ROW, MAX_ROWS, Number(addon.match(/^local INSET = (\d+)/m)[1])]);
   assert.equal(inset, STRIP_INSET, 'where the decoder looks');

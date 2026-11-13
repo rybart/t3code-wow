@@ -881,7 +881,7 @@ watcher:SetScript("OnUpdate", function()
 end)
 
 function L:SetupChord()
-	local mine = GetBindingKey("T3CODE_TOGGLE")
+	local mine = GetBindingKey("ORCA_TOGGLE")
 	self.keyText = mine and L.KeyText(mine) or nil
 	self.enabled = ns.db.settings.padChord ~= "off" and C_GamePad ~= nil and ButtonIndex("PADLTRIGGER") ~= nil
 	self.chord = self.enabled and table.concat(L.CHORD, "-") or nil
@@ -930,6 +930,6 @@ ns:On("Login", function()
 end)
 
 ns:RegisterEvent("UPDATE_BINDINGS", function()
-	local mine = GetBindingKey("T3CODE_TOGGLE")
+	local mine = GetBindingKey("ORCA_TOGGLE")
 	L.keyText = mine and L.KeyText(mine) or nil
 end)

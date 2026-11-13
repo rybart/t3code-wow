@@ -5,7 +5,7 @@
 //   game -> bridge   pixel frame: records split by RS, fields by US
 //       H  proto session ui slot sig gen flags view version     (always first)
 //       C  id verb args...                                      (pending commands)
-//   bridge -> game   T3Code_Inbox = { gen, nextSig, ack = { ui, seq }, threads, view, ... }
+//   bridge -> game   Orca_Inbox = { gen, nextSig, ack = { ui, seq }, threads, view, ... }
 //                    written into the next slots the addon will load, then signal
 //                    `nextSig - 1` is raised so the addon loads exactly one slot.
 
@@ -31,9 +31,9 @@ import { markdownToWow, markdownToSpeech, firstLine, escapeWow } from './format.
 import { loadOrCreateKey, deriveKeys, open as openSealed, ENCRYPTED_VERSION } from './strip-crypto.js';
 
 export const VERSION = '0.5.0';
-export const STATE_DIR = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local/state'), 't3code-wow');
-const DATA_DIR = path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local/share'), 't3code-wow');
-const CLI = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'bin', 't3code-wow.js');
+export const STATE_DIR = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local/state'), 'orca-wow');
+const DATA_DIR = path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local/share'), 'orca-wow');
+const CLI = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'orca-wow.js');
 
 const sec = (iso) => (iso ? Math.floor(Date.parse(iso) / 1000) : undefined);
 
@@ -304,7 +304,7 @@ export function friendlyError(message) {
   const text = String(message || 'failed');
   if (/Missing key|Expected .*(Literal|Struct|Union)|is unexpected|Unexpected key/.test(text)) {
     const field = /at \[\"?([^\]"]+)/.exec(text)?.[1];
-    return `T3 Code didn't accept that request${field ? ` (it wants "${field}")` : ''}. Update t3code-wow to match your T3 Code version.`;
+    return `T3 Code didn't accept that request${field ? ` (it wants "${field}")` : ''}. Update orca-wow to match your T3 Code version.`;
   }
   return text.split('\n')[0].slice(0, 200);
 }
@@ -325,7 +325,7 @@ export class Bridge {
     if (installed > 0) this.bank.slots = installed;
     this.capture = new StripCapture({ log: this.log, backend: config.capture?.backend || 'auto', region: config.capture?.region || null });
     this.tokens = tokenProvider({ log: this.log });
-    // Every T3 Code machine we show: this one, plus any added with `t3code-wow env add`.
+    // Every T3 Code machine we show: this one, plus any added with `orca-wow env add`.
     // This fork watches Orca by default; `"backend": "t3"` in the config goes back to T3 Code.
     this.backend = config.backend === 't3' ? 't3' : 'orca';
     const localClient = this.backend === 'orca' ? new OrcaClient({ log: this.log }) : null;
@@ -390,7 +390,7 @@ export class Bridge {
   // ---------------------------------------------------------------------------
 
   async start() {
-    this.log(`t3code-wow bridge ${VERSION}; addons: ${this.addonsDir}; slots: ${this.bank.slots}`);
+    this.log(`orca-wow bridge ${VERSION}; addons: ${this.addonsDir}; slots: ${this.bank.slots}`);
     try {
       this.bank.prepareBells();
     } catch (err) {

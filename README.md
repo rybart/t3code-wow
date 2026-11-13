@@ -31,7 +31,7 @@ Watch and run your [T3 Code](https://t3.codes) agent threads without leaving the
 curl -fsSL https://raw.githubusercontent.com/ryanrhughes/t3code-wow/main/install.sh | bash
 ```
 
-It finds World of Warcraft: Forever in Omarchy's Battle.net, in the prefixes Faugus Launcher and Lutris recorded, or wherever Battle.net installed it (for anything unusual, add `bash -s -- --wow "/path/to/World of Warcraft"`). It installs the addon into the game, gives the bridge a T3 Code session limited to reading and running threads, and starts the bridge as the `t3code-wow` user service.
+It finds World of Warcraft: Forever in Omarchy's Battle.net, in the prefixes Faugus Launcher and Lutris recorded, or wherever Battle.net installed it (for anything unusual, add `bash -s -- --wow "/path/to/World of Warcraft"`). It installs the addon into the game, gives the bridge a T3 Code session limited to reading and running threads, and starts the bridge as the `orca-wow` user service.
 
 Then it tells you what to do in the game and waits until the game checks in. The first time, **fully quit and restart World of Warcraft**: the game only finds new addon folders when it starts. After that, updates only need a `/reload`.
 
@@ -47,16 +47,16 @@ Run the same install command again:
 curl -fsSL https://raw.githubusercontent.com/ryanrhughes/t3code-wow/main/install.sh | bash
 ```
 
-It downloads the latest version, replaces the installed copy and restarts the bridge, keeping your settings, T3 Code session and machines. Then type `/reload` in game; the installer tells you when an update needs a full game restart instead. To install a specific release, pipe to `T3CODE_WOW_REF=v0.2.0 bash` instead of `bash`. From a clone, `git pull` and run `./install.sh` again.
+It downloads the latest version, replaces the installed copy and restarts the bridge, keeping your settings, T3 Code session and machines. Then type `/reload` in game; the installer tells you when an update needs a full game restart instead. To install a specific release, pipe to `ORCA_WOW_REF=v0.2.0 bash` instead of `bash`. From a clone, `git pull` and run `./install.sh` again.
 
 ### macOS
 
-The same install command works on a Mac with the native WoW: Forever client. Install Node.js 22 first (`brew install node`). The installer finds the game in `/Applications/World of Warcraft` or wherever Battle.net put it, and runs the bridge as a launch agent (`~/Library/LaunchAgents/t3code-wow.plist`) instead of a systemd service.
+The same install command works on a Mac with the native WoW: Forever client. Install Node.js 22 first (`brew install node`). The installer finds the game in `/Applications/World of Warcraft` or wherever Battle.net put it, and runs the bridge as a launch agent (`~/Library/LaunchAgents/orca-wow.plist`) instead of a systemd service.
 
-- **Screen Recording permission.** The bridge reads the strip with macOS's `screencapture`, so it needs Screen Recording. The first time it runs, macOS asks, or lists `node` switched off under System Settings > Privacy & Security > Screen & System Audio Recording. Turn it on, then restart the bridge with `launchctl kickstart -k gui/$(id -u)/t3code-wow`. If the link stays down, `t3code-wow status` names the exact `node` it needs. The permission belongs to that `node` binary, so other programs that run with it can record the screen too. After you upgrade Node, macOS asks again for the new one.
+- **Screen Recording permission.** The bridge reads the strip with macOS's `screencapture`, so it needs Screen Recording. The first time it runs, macOS asks, or lists `node` switched off under System Settings > Privacy & Security > Screen & System Audio Recording. Turn it on, then restart the bridge with `launchctl kickstart -k gui/$(id -u)/orca-wow`. If the link stays down, `orca-wow status` names the exact `node` it needs. The permission belongs to that `node` binary, so other programs that run with it can record the screen too. After you upgrade Node, macOS asks again for the new one.
 - **Display settings.** Run the game at the display's full resolution (its Retina resolution on a Retina display), fullscreen or windowed. A resolution the display stretches blurs the strip.
 - **Speech** uses the system voice (`say`). **Dictation** isn't available on macOS yet, and the Usage tab shows what T3 Code reports.
-- `~/.local/bin` isn't on a Mac's PATH by default. The installer says so; add it to your shell profile, or run `~/.local/bin/t3code-wow`.
+- `~/.local/bin` isn't on a Mac's PATH by default. The installer says so; add it to your shell profile, or run `~/.local/bin/orca-wow`.
 
 ### Windows
 
@@ -68,17 +68,17 @@ Install Node.js 22 first (`winget install OpenJS.NodeJS.LTS`, then open a new Po
 irm https://raw.githubusercontent.com/ryanrhughes/t3code-wow/main/install.ps1 | iex
 ```
 
-The installer finds the game wherever Battle.net installed it, and needs no administrator rights. It installs the addon into the game, gives the bridge a T3 Code session limited to reading and running threads, and registers the bridge as the `t3code-wow` task in Task Scheduler. That task starts the bridge each time you sign in. If the game is somewhere unusual, pass its folder:
+The installer finds the game wherever Battle.net installed it, and needs no administrator rights. It installs the addon into the game, gives the bridge a T3 Code session limited to reading and running threads, and registers the bridge as the `orca-wow` task in Task Scheduler. That task starts the bridge each time you sign in. If the game is somewhere unusual, pass its folder:
 
 ```powershell
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/ryanrhughes/t3code-wow/main/install.ps1))) --wow "D:\Games\World of Warcraft"
 ```
 
-- **In the background.** The bridge runs without a window, and starts again 3 seconds after it stops for any reason. Its log is `%USERPROFILE%\.local\state\t3code-wow\bridge.log`, and `t3code-wow status --log` shows the latest lines.
+- **In the background.** The bridge runs without a window, and starts again 3 seconds after it stops for any reason. Its log is `%USERPROFILE%\.local\state\orca-wow\bridge.log`, and `orca-wow status --log` shows the latest lines.
 - **Screen link.** The bridge reads the top-left corner of the game window off the screen. While another window covers that corner, it reads the game window itself instead. An overlay that another program draws over that corner, such as a frame-rate counter, hides the strip while it's there, as on the other platforms. The bridge can't tell that a click-through overlay is in the way, so keep overlays out of the game's top-left corner. While the game isn't responding, the bridge can't read the game window itself, so a covered corner isn't read and a screenshot is refused until the game answers again. The game must not be minimized, and must be on the current virtual desktop. Which display modes and scaling settings work in game hasn't been checked yet.
 - **Speech and dictation.** The desktop voice and dictation aren't available on Windows yet. The addon uses the game's own voice for reading aloud instead, and the Usage tab shows what T3 Code reports.
-- **Update** by running the install command again. **Uninstall** with `t3code-wow uninstall`, which also removes the task. If the game is running and still has some of the addon's files open, uninstall stops and says so. Quit the game and run it again to finish.
-- The bridge's files are in `%USERPROFILE%\.local\share\t3code-wow` and its settings in `%USERPROFILE%\.config\t3code-wow`. The `t3code-wow` command is a one-line file in `%LOCALAPPDATA%\Microsoft\WindowsApps`, a folder Windows already has on your PATH.
+- **Update** by running the install command again. **Uninstall** with `orca-wow uninstall`, which also removes the task. If the game is running and still has some of the addon's files open, uninstall stops and says so. Quit the game and run it again to finish.
+- The bridge's files are in `%USERPROFILE%\.local\share\orca-wow` and its settings in `%USERPROFILE%\.config\orca-wow`. The `orca-wow` command is a one-line file in `%LOCALAPPDATA%\Microsoft\WindowsApps`, a folder Windows already has on your PATH.
 - To install from a clone, run `powershell -ExecutionPolicy Bypass -File install.ps1` in it.
 
 ### CachyOS and KDE Plasma
@@ -93,7 +93,7 @@ The same install command works on CachyOS (or another Arch system) running KDE P
 ### Uninstall
 
 ```bash
-t3code-wow uninstall
+orca-wow uninstall
 ```
 
 This removes the addon and its update folders, its settings in the game, the bridge service (the launch agent on macOS, the logon task on Windows), the bridge's T3 Code sessions (here and on any machine you added) and its files. On macOS, also turn `node` off under Screen & System Audio Recording: uninstalling can't do that for you.
@@ -103,20 +103,20 @@ This removes the addon and its update folders, its settings in the game, the bri
 - `/t3` opens or closes the window. You can also use the minimap button, the game menu (Esc), or hold both triggers and press Back on a controller.
 - `/t3 new` starts a thread, `/t3 usage` opens the usage tab, `/t3 settings` the settings.
 - `/t3 unlock` lets you drag the tracker section somewhere else; Settings → Reset tracker puts it back under your quests.
-- To see threads from another machine on your tailnet, run `t3code-wow env add <host>`. It finds the machine's T3 Code over Tailscale and creates a session for the bridge over SSH.
+- To see threads from another machine on your tailnet, run `orca-wow env add <host>`. It finds the machine's T3 Code over Tailscale and creates a session for the bridge over SSH.
 
 ## Commands
 
 ```bash
-t3code-wow status         # what the bridge sees: T3 Code, the game, the screen link, the addon
-t3code-wow status --log   # the same, with recent log lines
-t3code-wow env            # other machines shown in game (add <host> / remove <name>)
-t3code-wow uninstall      # remove everything (see above)
+orca-wow status         # what the bridge sees: T3 Code, the game, the screen link, the addon
+orca-wow status --log   # the same, with recent log lines
+orca-wow env            # other machines shown in game (add <host> / remove <name>)
+orca-wow uninstall      # remove everything (see above)
 ```
 
 ## When something's wrong
 
-1. Run `t3code-wow status --log` and check each line.
+1. Run `orca-wow status --log` and check each line.
 2. In game, run `/t3 selftest`. It checks each step between the game and T3 Code and says which one fails.
 3. `/t3 report` fills the T3 Code message box with diagnostics and attaches a screenshot of your game. Send it to an agent, or copy the text into an issue.
 
@@ -135,7 +135,7 @@ Addons can't open network connections or read files, so the addon and the bridge
 The bridge talks to T3 Code over the same WebSocket API its apps use. Details, measurements and design decisions are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 - **The strip is encrypted.** Streams and recordings show it, so every frame is encrypted and authenticated (ChaCha20 and HMAC-SHA-256) with a key only the bridge and your addon have. To anyone else it's noise, and the bridge ignores anything it can't authenticate.
-- **Addon managers.** WowUp shows a single "T3 Code" entry. Leave the `T3Code_S###` folders alone: the addon needs them.
+- **Addon managers.** WowUp shows a single "T3 Code" entry. Leave the `Orca_S###` folders alone: the addon needs them.
 - **Nothing else.** The addon never sends anything to Blizzard. The bridge doesn't read game memory or press keys for you; it reads pixels and writes files in the addon folder.
 
 ## Contributing

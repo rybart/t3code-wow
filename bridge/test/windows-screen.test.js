@@ -12,7 +12,7 @@ const at = process.platform === 'win32' && process.env.T3WOW_SCREEN_TEST;
 const asked = { skip: !at && 'it draws a window: on Windows, set T3WOW_SCREEN_TEST=x,y to say where' };
 
 const POWERSHELL = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-const SHOW = "$ErrorActionPreference = 'Stop'; Add-Type -LiteralPath $env:T3WOW_STRIP_SRC -ReferencedAssemblies System.Windows.Forms,System.Drawing; [T3CodeWow.StripWindow]::Run()";
+const SHOW = "$ErrorActionPreference = 'Stop'; Add-Type -LiteralPath $env:T3WOW_STRIP_SRC -ReferencedAssemblies System.Windows.Forms,System.Drawing; [OrcaWow.StripWindow]::Run()";
 const CLIENT = { width: 700, height: 220 };
 const OVER_THE_CORNER = { x: -20, y: -20, width: 320, height: 140 };
 const TOOLTIP_SIZED = { x: 201, y: 22, width: 16, height: 16 };

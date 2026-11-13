@@ -177,7 +177,7 @@ function F:Refresh()
 		else
 			b.Text:SetText(ns.Color("grey", lead .. " " .. up.t))
 			b.Status:SetText("")
-			b.tip = "It came from a computer the bridge doesn't know. Add that computer with t3code-wow env add on your desktop to open it here."
+			b.tip = "It came from a computer the bridge doesn't know. Add that computer with orca-wow env add on your desktop to open it here."
 		end
 		b.title = up.t
 		b:ClearAllPoints()

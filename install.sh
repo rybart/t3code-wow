@@ -1,20 +1,20 @@
 #!/bin/bash
-# Install or update T3 Code for World of Warcraft.
+# Install or update Orca for World of Warcraft.
 #
-#   curl -fsSL https://raw.githubusercontent.com/ryanrhughes/t3code-wow/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/rybart/t3code-wow/orca-adapter/install.sh | bash
 #
 # Run the same command again to update. From a clone, ./install.sh installs that copy.
 # Options (after `bash -s --` when piping): --wow "/path/to/World of Warcraft" --slots N --no-service
 #
-# Copies the bridge and addon to ~/.local/share/t3code-wow, puts `t3code-wow` on your
-# PATH, then runs `t3code-wow install`, which installs the addon into the game, gives
-# the bridge a T3 Code session, starts it as a user service and walks you through the
-# first launch.
+# Copies the bridge and addon to ~/.local/share/orca-wow, puts `orca-wow` on your
+# PATH, then runs `orca-wow install`, which installs the addon into the game, gives
+# the bridge what it needs to reach Orca, starts it as a user service and walks you
+# through the first launch.
 set -euo pipefail
 
-repo="ryanrhughes/t3code-wow"
-ref="${T3CODE_WOW_REF:-main}"
-dest="${XDG_DATA_HOME:-$HOME/.local/share}/t3code-wow"
+repo="rybart/t3code-wow"
+ref="${ORCA_WOW_REF:-orca-adapter}"
+dest="${XDG_DATA_HOME:-$HOME/.local/share}/orca-wow"
 bin="$HOME/.local/bin"
 
 if ! command -v node >/dev/null 2>&1; then
@@ -49,12 +49,30 @@ if [[ -z $src ]]; then
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' EXIT
   echo "Downloading T3 Code for World of Warcraft ($ref)…"
-  url="${T3CODE_WOW_TARBALL:-https://codeload.github.com/$repo/tar.gz/$ref}"
+  url="${ORCA_WOW_TARBALL:-https://codeload.github.com/$repo/tar.gz/$ref}"
   if ! curl -fsSL "$url" | tar -xz -C "$tmp" --strip-components=1; then
     echo "Couldn't download $url." >&2
     exit 1
   fi
   src="$tmp"
+fi
+
+# Before the rename to orca-wow this was t3code-wow: stop that service and move its
+# folders (settings, the link key, saved state, the WoW Assistant's workspace) across.
+old_data="${XDG_DATA_HOME:-$HOME/.local/share}/t3code-wow"
+if [[ -d $old_data || -L $bin/t3code-wow ]]; then
+  if [[ $(uname -s) == "Darwin" ]]; then
+    launchctl bootout "gui/$(id -u)/t3code-wow" 2>/dev/null || true
+    rm -f "$HOME/Library/LaunchAgents/t3code-wow.plist"
+  elif command -v systemctl >/dev/null 2>&1; then
+    systemctl --user disable --now t3code-wow.service 2>/dev/null || true
+    rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/t3code-wow.service"
+  fi
+  for pair in "${XDG_DATA_HOME:-$HOME/.local/share}" "${XDG_STATE_HOME:-$HOME/.local/state}" "${XDG_CONFIG_HOME:-$HOME/.config}"; do
+    if [[ -d $pair/t3code-wow && ! -e $pair/orca-wow ]]; then mv "$pair/t3code-wow" "$pair/orca-wow"; fi
+  done
+  rm -f "$bin/t3code-wow"
+  echo "Moved the old t3code-wow install to orca-wow."
 fi
 
 mkdir -p "$dest" "$bin"
@@ -64,15 +82,15 @@ cp -r "$src/addon" "$dest/addon.new"
 rm -rf "$dest/bridge" "$dest/addon"
 mv "$dest/bridge.new" "$dest/bridge"
 mv "$dest/addon.new" "$dest/addon"
-chmod +x "$dest/bridge/bin/t3code-wow.js"
-ln -sf "$dest/bridge/bin/t3code-wow.js" "$bin/t3code-wow"
+chmod +x "$dest/bridge/bin/orca-wow.js"
+ln -sf "$dest/bridge/bin/orca-wow.js" "$bin/orca-wow"
 if [[ ":$PATH:" != *":$bin:"* ]]; then
-  echo "Note: $bin isn't on your PATH, so run t3code-wow as $bin/t3code-wow (or add $bin to PATH in your shell profile)." >&2
+  echo "Note: $bin isn't on your PATH, so run orca-wow as $bin/orca-wow (or add $bin to PATH in your shell profile)." >&2
 fi
 
 # When piped from curl, stdin is this script; give the guided setup the keyboard.
 if [[ ! -t 0 ]] && (: </dev/tty) 2>/dev/null; then
-  node "$dest/bridge/bin/t3code-wow.js" install "$@" </dev/tty
+  node "$dest/bridge/bin/orca-wow.js" install "$@" </dev/tty
 else
-  node "$dest/bridge/bin/t3code-wow.js" install "$@"
+  node "$dest/bridge/bin/orca-wow.js" install "$@"
 fi

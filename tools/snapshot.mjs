@@ -20,7 +20,7 @@ bridge.client = { session: 'test', ui: 'test', seq: 1, ackedSeq: -1, flags: 'o',
 for (const t of threads.slice(0, 6)) await bridge.refreshView(t.id, true);
 await bridge.refreshView(viewId, true);
 const snap = { v: 1, gen: Date.now(), now: Math.floor(Date.now() / 1000), nextSig: 2, ack: { ui: 'test', seq: 1 }, key: bridge.stripKeys.hex, ...bridge.buildSnapshot() };
-const buf = luaAssignment('T3Code_Inbox', snap);
+const buf = luaAssignment('Orca_Inbox', snap);
 fs.writeFileSync(out, buf);
 console.log(`wrote ${out}: ${buf.length} bytes, ${snap.threads.length} threads, view ${viewId} (${snap.view?.msgs?.length ?? 0} messages)`);
 fs.writeFileSync(out.replace(/\.lua$/, '.view'), viewId || '');

@@ -27,7 +27,7 @@ const needsLua = { skip: process.platform === 'win32' && !hasLua() && 'lua5.1 is
 
 function tempAddons(slots = 8) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't3wow-addons-'));
-  fs.mkdirSync(path.join(dir, 'T3Code'));
+  fs.mkdirSync(path.join(dir, 'Orca'));
   new SlotBank(dir, { slots }).install();
   return dir;
 }
@@ -51,22 +51,22 @@ function fakeBridge(slots = 8, config = {}) {
 }
 
 function loadSlot(dir, i) {
-  const file = path.join(dir, `T3Code_S${String(i).padStart(3, '0')}`, 'Inbox.lua');
-  const out = execFileSync('lua5.1', ['-e', `dofile(${JSON.stringify(file)}) print(T3Code_Inbox and T3Code_Inbox.gen or "nil", T3Code_Inbox and T3Code_Inbox.nextSig or "nil", T3Code_Inbox and T3Code_Inbox.threads and T3Code_Inbox.threads[1] and T3Code_Inbox.threads[1].title or "")`]);
+  const file = path.join(dir, `Orca_S${String(i).padStart(3, '0')}`, 'Inbox.lua');
+  const out = execFileSync('lua5.1', ['-e', `dofile(${JSON.stringify(file)}) print(Orca_Inbox and Orca_Inbox.gen or "nil", Orca_Inbox and Orca_Inbox.nextSig or "nil", Orca_Inbox and Orca_Inbox.threads and Orca_Inbox.threads[1] and Orca_Inbox.threads[1].title or "")`]);
   const [gen, nextSig, title] = out.toString().trim().split('\t');
   return { gen: Number(gen), nextSig: Number(nextSig), title };
 }
 
 // One value out of a slot's snapshot, read by the same Lua the game runs.
 function slotValue(dir, i, expr) {
-  const file = path.join(dir, `T3Code_S${String(i).padStart(3, '0')}`, 'Inbox.lua');
-  const out = execFileSync('lua5.1', ['-e', `dofile(${JSON.stringify(file)}) local t = T3Code_Inbox io.write(tostring(${expr}))`]);
+  const file = path.join(dir, `Orca_S${String(i).padStart(3, '0')}`, 'Inbox.lua');
+  const out = execFileSync('lua5.1', ['-e', `dofile(${JSON.stringify(file)}) local t = Orca_Inbox io.write(tostring(${expr}))`]);
   return out.toString();
 }
 
 // Size of the bell file that signal k rings (0 if empty or not created yet).
 function rung(dir, k) {
-  const file = path.join(dir, 'T3Code', 'Signals', String(3991 + ((k - 1) % 8)).padStart(5, '0') + '.wav');
+  const file = path.join(dir, 'Orca', 'Signals', String(3991 + ((k - 1) % 8)).padStart(5, '0') + '.wav');
   try {
     return fs.statSync(file).size;
   } catch {
@@ -91,7 +91,7 @@ test('unencrypted frames: the hello is answered, commands are never run', async 
   assert.equal(calls.length, 0);
   assert.ok(b.client && !b.client.encrypted, 'hello accepted');
   b.publishNow('test');
-  const lua = fs.readFileSync(path.join(dir, 'T3Code_S001', 'Inbox.lua'), 'latin1');
+  const lua = fs.readFileSync(path.join(dir, 'Orca_S001', 'Inbox.lua'), 'latin1');
   assert.match(lua, new RegExp(`key="${b.stripKeys.hex}"`), 'snapshot carries the keys');
   // A forged "encrypted" frame (wrong keys) is dropped entirely.
   const other = { ...frame(2, [['H', 1, 'sess', 'ui1', 2, 1, 0, 'o', '', '0.1.0'], ['C', 2, 'send', 't1', 'forged']]) };
@@ -212,7 +212,7 @@ test('commands run once, in order, and results are published', async () => {
   assert.deepEqual(calls.map((c) => c[0]), ['send', 'new']);
   assert.equal(calls[0][2], 'hello');
   b.publishNow();
-  const lua = fs.readFileSync(path.join(dir, 'T3Code_S001', 'Inbox.lua'), 'latin1');
+  const lua = fs.readFileSync(path.join(dir, 'Orca_S001', 'Inbox.lua'), 'latin1');
   assert.match(lua, /results=\{\{id=1,ok=true,msg="Sent"\},\{id=2,ok=true,open="new-thread"\}/);
   assert.match(lua, /ack=\{ui="ui1",seq=2\}/);
   b.stop();
@@ -375,8 +375,8 @@ test('bells rotate: ringing k empties the bell four behind it', () => {
   for (const k of [9, 10, 11, 12]) assert.ok(rung(dir, k) > 0, `bell ${k}`);
   for (const k of [13, 14, 15, 16]) assert.equal(rung(dir, k), 0, `bell ${k} (same files as 5..8)`);
   bank.prepareBells();
-  assert.ok(fs.statSync(path.join(dir, 'T3Code', 'Signals', '03999.wav')).size > 174762, 'self-test control is long');
-  assert.equal(fs.statSync(path.join(dir, 'T3Code', 'Signals', '04000.wav')).size, 0);
+  assert.ok(fs.statSync(path.join(dir, 'Orca', 'Signals', '03999.wav')).size > 174762, 'self-test control is long');
+  assert.equal(fs.statSync(path.join(dir, 'Orca', 'Signals', '04000.wav')).size, 0);
   bank.resetSignals();
   for (let k = 1; k <= 8; k++) assert.equal(rung(dir, k), 0);
 });
@@ -771,9 +771,9 @@ test('usage comes from the Omarchy records the Agents panel keeps', async () => 
 
 test('slot manifests are identical and keep the live data out of addon-manager fingerprints', () => {
   const dir = tempAddons(3);
-  const read = (i, f) => fs.readFileSync(path.join(dir, `T3Code_S00${i}`, f), 'utf8');
-  assert.equal(read(1, 'T3Code_S001.toc'), read(3, 'T3Code_S003.toc'));
-  assert.doesNotMatch(read(1, 'T3Code_S001.toc'), /Dependencies|Inbox\.lua/);
+  const read = (i, f) => fs.readFileSync(path.join(dir, `Orca_S00${i}`, f), 'utf8');
+  assert.equal(read(1, 'Orca_S001.toc'), read(3, 'Orca_S003.toc'));
+  assert.doesNotMatch(read(1, 'Orca_S001.toc'), /Dependencies|Inbox\.lua/);
   // WowUp/CurseForge follow only self-closing <Script file="..."/> includes.
   const xml = read(1, 'Slot.xml');
   assert.match(xml, /<Script file="Inbox\.lua"><\/Script>/);
@@ -1064,7 +1064,7 @@ test('the family part keeps its hash through replies and a child’s tool calls,
 test('the family part is left out of later slots while the addon holds it, never out of slots 1-3', () => {
   const { b, dir } = fakeBridge();
   const { update } = family(b);
-  const slot = (i) => fs.readFileSync(path.join(dir, `T3Code_S${String(i).padStart(3, '0')}`, 'Inbox.lua'), 'latin1');
+  const slot = (i) => fs.readFileSync(path.join(dir, `Orca_S${String(i).padStart(3, '0')}`, 'Inbox.lua'), 'latin1');
   const hello = (seq, x = {}) => b.onFrame(frame(seq, [['H', 1, 'sess', 'ui1', 4, 1, b.lastGen, 'o', 'idle', '0.1.0', '8', '', x.l || '', x.p || '', x.v || '', x.f || '']]));
   hello(1);
   const first = b.buildSnapshot();

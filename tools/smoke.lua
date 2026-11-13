@@ -6,23 +6,23 @@ local Stub = dofile("tools/wowstub.lua")
 Stub.slotData.default = snapshot
 
 local function check(cond, msg)
-	if not cond then for _, e in ipairs(T3Code and T3Code.errors or {}) do print("RECORDED ERROR: " .. e.msg) end error("CHECK FAILED: " .. msg, 2) end
+	if not cond then for _, e in ipairs(Orca and Orca.errors or {}) do print("RECORDED ERROR: " .. e.msg) end error("CHECK FAILED: " .. msg, 2) end
 	print("ok - " .. msg)
 end
 
 -- Load files in TOC order.
 local ns = {}
-for line in io.lines(addonDir .. "/T3Code.toc") do
+for line in io.lines(addonDir .. "/Orca.toc") do
 	line = line:gsub("\r", "")
 	if line ~= "" and not line:match("^#") and line:match("%.lua$") then
 		local path = addonDir .. "/" .. line:gsub("\\", "/")
 		local chunk = assert(loadfile(path))
-		chunk("T3Code", ns)
+		chunk("Orca", ns)
 	end
 end
-check(T3Code == ns, "namespace exported")
+check(Orca == ns, "namespace exported")
 
-Stub.Fire("ADDON_LOADED", "T3Code")
+Stub.Fire("ADDON_LOADED", "Orca")
 check(ns.db and ns.db.session and #ns.db.session == 8, "saved variables initialised")
 Stub.Fire("PLAYER_LOGIN")
 check(ns.Transport.slotCount == 600, "found 600 slots by binary search")
@@ -30,7 +30,7 @@ check(ns.Store.applied == 1, "bootstrap slot applied")
 check(#ns.Store.data.threads > 0, "threads loaded: " .. #ns.Store.data.threads)
 check(ns.Transport.stripShown, "hello strip shown")
 check(ns.Transport:Encrypted(), "link keys loaded from the bootstrap slot")
-check(T3Code_Inbox == nil, "slot global cleared after loading")
+check(Orca_Inbox == nil, "slot global cleared after loading")
 do
 	local drawn = WOWSTUB.StripCells()
 	-- Header byte 3 (version) spans cells 6..8: bits 16..23 of the frame.
@@ -54,8 +54,8 @@ local sig = ns.db.sigNext
 -- Patch the snapshot's ack to this UI session.
 local chunk = assert(loadfile(snapshot))
 chunk()
-local data = T3Code_Inbox
-T3Code_Inbox = nil
+local data = Orca_Inbox
+Orca_Inbox = nil
 data.ack = { ui = ns.ui, seq = ns.Transport.stripSeq }
 -- The harness edits the snapshot in place, so its hashes (x) would no longer describe
 -- what it carries. Without them every snapshot counts as complete, as an older bridge's
@@ -1244,16 +1244,16 @@ check(entry and entry.layoutIndex == 4.5, "game menu entry sits above Log Out")
 _G.HideUIPanel = function() end
 entry.cb()
 check(f._shown, "game menu entry opens the window")
-T3Code_Binding("toggle")
+Orca_Binding("toggle")
 check(not f._shown, "shortcut toggles it closed")
 check(#(ns.db.errors or {}) == 0, "no errors recorded")
 
 -- Slash command
-SlashCmdList.T3CODE("status")
+SlashCmdList.ORCA("status")
 check(#Stub.printed > 0, "status printed: " .. Stub.printed[#Stub.printed])
 
 -- Self-test: the long control plays, the empty one doesn't -> bells usable
-Stub.validSounds = { ["Interface\\AddOns\\T3Code\\Signals\\03999.wav"] = true }
+Stub.validSounds = { ["Interface\\AddOns\\Orca\\Signals\\03999.wav"] = true }
 ns.Transport.signals = "untested"
 ns.Transport.testing = nil
 ns.Transport:SelfTest()
@@ -1266,11 +1266,11 @@ ns.Transport.signals = "ok"
 
 -- A bell rung a couple of numbers ahead is still heard; bells map onto 8 rotating
 -- files. Only a fresh snapshot moves the bell position (to the bridge's nextSig).
-local function BellPath(k) return string.format("Interface\\AddOns\\T3Code\\Signals\\%05d.wav", 3991 + (k - 1) % 8) end
+local function BellPath(k) return string.format("Interface\\AddOns\\Orca\\Signals\\%05d.wav", 3991 + (k - 1) % 8) end
 local freshFile = os.tmpname()
 do
 	local fh = assert(io.open(freshFile, "w"))
-	fh:write(string.format("dofile(%q) T3Code_Inbox.gen = 9e15 T3Code_Inbox.nextSig = 503\n", snapshot))
+	fh:write(string.format("dofile(%q) Orca_Inbox.gen = 9e15 Orca_Inbox.nextSig = 503\n", snapshot))
 	fh:close()
 end
 ns.Transport.exhausted = nil
@@ -1304,7 +1304,7 @@ Stub.now = Stub.now + 5
 ns.Transport:HideStrip() -- (as if the bridge acknowledged it; isolates the bell check)
 ns.Transport.lastLoadAt = Stub.now
 ns.Transport.bellProbe = nil
-Stub.validSounds = { [BellPath(503)] = true, ["Interface\\AddOns\\T3Code\\Signals\\04000.wav"] = true }
+Stub.validSounds = { [BellPath(503)] = true, ["Interface\\AddOns\\Orca\\Signals\\04000.wav"] = true }
 local loads2 = Stub.loadCount
 for _ = 1, 12 do Stub.Tick(0.2) end
 check(Stub.loadCount == loads2, "no slot loaded while the client is too slow to tell bells apart")

@@ -1,4 +1,4 @@
-// Pixel strip codec, shared with addon/T3Code/Core/Codec.lua.
+// Pixel strip codec, shared with addon/Orca/Core/Codec.lua.
 //
 // Frame bytes:
 //   [0x54 'T'] [0x33 '3'] [version] [seq hi, lo] [len hi, lo] [payload ...] [fletcher s1, s2]

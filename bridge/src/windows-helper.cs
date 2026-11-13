@@ -1,7 +1,7 @@
 // The bridge's Windows helper. windows.js starts Windows PowerShell 5.1 with
 //
 //   Add-Type -LiteralPath <this file> -ReferencedAssemblies System.Drawing,System.Web.Extensions
-//   [T3CodeWow.Helper]::Run()
+//   [OrcaWow.Helper]::Run()
 //
 // so this is compiled on the player's PC each time the bridge starts, by the compiler
 // inside .NET Framework 4.x, which ships with Windows 10 and 11. That compiler stops at
@@ -49,7 +49,7 @@ using System.Text;
 using System.Threading;
 using System.Web.Script.Serialization;
 
-namespace T3CodeWow {
+namespace OrcaWow {
   public static class Helper {
     [StructLayout(LayoutKind.Sequential)] struct FILETIME { public uint Low, High; }
     [StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }

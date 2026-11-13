@@ -1,11 +1,11 @@
 # Architecture
 
 ```
- WoW: Forever (Wine, macOS, Windows)                   t3code-wow bridge (Node, user service)
+ WoW: Forever (Wine, macOS, Windows)                   orca-wow bridge (Node, user service)
  ┌──────────────────────────────┐   pixels   ┌────────────────────────────────────────┐
- │ T3Code addon                 │──────────▶│ capture.js  reads the strip's pixels    │
+ │ Orca addon                 │──────────▶│ capture.js  reads the strip's pixels    │
  │  Transport.lua  strip, queue │            │ bridge.js   commands, pacing, snapshots │
- │  Store.lua      snapshot     │◀──────────│ slots.js    Inbox.lua into T3Code_S###  │
+ │  Store.lua      snapshot     │◀──────────│ slots.js    Inbox.lua into Orca_S###  │
  │  UI/*           window,      │   files    │             Signals/NNNNN.wav           │
  │                 tracker, pad │            │ t3.js       WebSocket RPC to T3 Code ───┼──▶ T3 Code server
  └──────────────────────────────┘            │ voice.js    speech, dictation           │
@@ -43,13 +43,13 @@ frames (all of them, once the addon has its keys) carry
 nonce(12)  ChaCha20(records)  HMAC-SHA-256(version, seq, nonce, ciphertext)[0..8]
 ```
 
-- The bridge makes a random master key per install (`~/.local/state/t3code-wow/strip.key`,
+- The bridge makes a random master key per install (`~/.local/state/orca-wow/strip.key`,
   mode 0600) and derives an encryption key and a MAC key from it. Both go into every
   snapshot it writes to the slots. Slot files are never on screen. Windows has no file
   modes, so there the key relies on the profile folder, which other standard accounts
   can't open.
 - The addon keeps the keys in file-local variables in `Transport.lua`. They aren't on
-  the exported `T3Code` table and aren't saved. The slot global is cleared on load.
+  the exported `Orca` table and aren't saved. The slot global is cleared on load.
 - Nonces are a per-load prefix (time and random bytes) plus a counter, and a frame is
   re-sealed only when its content changes.
 - Version 1 (plaintext) frames are only ever a bare hello with no thread id. The addon
@@ -115,16 +115,16 @@ retries with backoff.
 
 **macOS.** The bridge finds the game window in CoreGraphics' window list (through a JXA script run by `osascript`, so there's nothing to compile) and captures the corner with `screencapture -R`, which returns physical pixels on a Retina display. The strip can start below the window's top: under a windowed game's title bar, or below the notch of a MacBook display in fullscreen. So the decoder searches 40 extra points down instead of guessing either height. Both tools run as the bridge, which needs the Screen Recording permission; the bridge asks for it when it starts.
 
-**KDE Plasma.** KWin doesn't implement wlroots' screencopy, so `grim` can't read it. The bridge uses KWin's D-Bus API through `busctl` (part of systemd): `org.kde.krunner1.Match` on `/WindowsRunner` lists windows captioned "World of Warcraft", `getWindowInfo` gives each one's frame geometry, pid, desktops and minimized state, and `org.kde.KWin.ScreenShot2.CaptureArea` writes the corner's raw pixels (a QImage format KWin names in its reply) into a pipe the bridge passes as fd 3. It asks for native resolution so the cells aren't resampled on a scaled display, and searches 40 pixels down for a windowed game's title bar, as on macOS. Screenshots use `CaptureWindow`, which renders the window even while it's covered. On KWin 6.8 these calls work without the `X-KDE-DBUS-Restricted-Interfaces` grant that Spectacle's desktop file carries; if a later KWin refuses them, the error shows in `t3code-wow status`.
+**KDE Plasma.** KWin doesn't implement wlroots' screencopy, so `grim` can't read it. The bridge uses KWin's D-Bus API through `busctl` (part of systemd): `org.kde.krunner1.Match` on `/WindowsRunner` lists windows captioned "World of Warcraft", `getWindowInfo` gives each one's frame geometry, pid, desktops and minimized state, and `org.kde.KWin.ScreenShot2.CaptureArea` writes the corner's raw pixels (a QImage format KWin names in its reply) into a pipe the bridge passes as fd 3. It asks for native resolution so the cells aren't resampled on a scaled display, and searches 40 pixels down for a windowed game's title bar, as on macOS. Screenshots use `CaptureWindow`, which renders the window even while it's covered. On KWin 6.8 these calls work without the `X-KDE-DBUS-Restricted-Interfaces` grant that Spectacle's desktop file carries; if a later KWin refuses them, the error shows in `orca-wow status`.
 
 **Windows.** Node can't call the Windows API, and starting PowerShell for each capture costs 0.3 to 1.3 s, far too slow for a loop that runs every 150 ms. So the bridge keeps one Windows PowerShell 5.1 process running, which compiles `bridge/src/windows-helper.cs` with `Add-Type` when it starts. Both ship with Windows, so there's nothing to install or build. The bridge writes this helper one line of JSON per request, and reads back one line of JSON followed by the raw pixels. The helper is per-monitor DPI aware and reads the game window's client area in physical pixels. The client area starts exactly at the game's UI origin, so there's no title bar to search past. The helper reads the strip by copying that corner of the screen. While another window covers the corner, or the corner is off screen, it uses `PrintWindow` instead, which has Windows render the game window itself. Screenshots always use `PrintWindow`, so a window on top of the game never ends up in the picture. The same helper lists the running programs, which is how the bridge finds the client. What was measured, and what hasn't been checked in game, is under [Windows notes](#windows-notes).
 
 ## Bridge → game: slots and signals
 
-`T3Code_S001…S1200` (1,200 by default) are load-on-demand addons grouped under T3Code in
+`Orca_S001…S1200` (1,200 by default) are load-on-demand addons grouped under Orca in
 the addon list (`## Group`). They deliberately have no `## Dependencies`: WowUp hides
 an unrecognised load-on-demand folder only when all its dependencies are recognised, and
-T3Code isn't on CurseForge, so a dependency on it made every slot its own "Unknown" row
+Orca isn't on CurseForge, so a dependency on it made every slot its own "Unknown" row
 (1,200 rows, measured with WowUp 2.24). Without it WowUp shows one "T3 Code" entry.
 
 Addon managers also fingerprint each folder (a 32-bit hash of the `.toc` and the files it
@@ -135,7 +135,7 @@ identical and lists a static `Slot.xml`, which loads `Inbox.lua` with
 `<Script file="Inbox.lua"></Script>`. The scanners only follow self-closing `<Script/>`
 tags, so all slots share one fixed fingerprint that matches nothing on CurseForge
 (checked with WowUp's own hashing code and a rescan).
-Each contains `Inbox.lua`, which assigns `T3Code_Inbox = { … }`. The bridge serializes
+Each contains `Inbox.lua`, which assigns `Orca_Inbox = { … }`. The bridge serializes
 plain data with `luaser.js`, so thread text can never become code. All text is escaped
 for WoW markup (`|` → `||`), then markdown is turned into colors and bullets.
 
@@ -226,7 +226,7 @@ The game menu gets a T3 Code button, and a controller chord opens the window.
 
 Windows support is new. This section says how the bridge runs in the background there, what was measured, and what hasn't been checked in game yet.
 
-**In the background.** The bridge reads the screen, so it has to run in the player's own desktop session, which a Windows service can't. A Task Scheduler task starts it when the user signs in. A normal user can register that task without administrator rights. The task runs `conhost.exe --headless node t3code-wow.js supervise`, because conhost is the only way found to start Node from a task without a window. The supervisor (`bridge/src/windows-service.js`) starts the bridge, sends its output to `bridge.log`, and starts it again 3 seconds after any exit. Task Scheduler can't do that restart here, because conhost exits with code 0 whatever Node's exit code was. Stopping the task ends conhost and nothing under it. So the supervisor and the bridge both watch conhost's pid and stop when it's gone, and the bridge saves its state as it stops.
+**In the background.** The bridge reads the screen, so it has to run in the player's own desktop session, which a Windows service can't. A Task Scheduler task starts it when the user signs in. A normal user can register that task without administrator rights. The task runs `conhost.exe --headless node orca-wow.js supervise`, because conhost is the only way found to start Node from a task without a window. The supervisor (`bridge/src/windows-service.js`) starts the bridge, sends its output to `bridge.log`, and starts it again 3 seconds after any exit. Task Scheduler can't do that restart here, because conhost exits with code 0 whatever Node's exit code was. Stopping the task ends conhost and nothing under it. So the supervisor and the bridge both watch conhost's pid and stop when it's gone, and the bridge saves its state as it stops.
 
 **One bridge at a time.** Two bridges would both read the same strip frame and run the same command, so a message could reach the agent twice. The supervisor records itself and its bridge in `running.json` in the state folder, each as a pid and a start time, because Windows gives a pid to another program once its process is gone. A new supervisor doesn't start while a recorded one is running. Install, restart and uninstall wait for the recorded supervisor and bridge to be gone before they start or delete anything, and end them after 8 seconds if they're still there.
 

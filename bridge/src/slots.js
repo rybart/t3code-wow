@@ -4,7 +4,7 @@
 // measured on live Forever clients (see docs/ARCHITECTURE.md):
 //
 //  * C_AddOns.LoadAddOn reads a load-on-demand addon's Lua from disk when it is
-//    loaded. Each slot addon (T3Code_S001...) can be loaded once per UI session, and
+//    loaded. Each slot addon (Orca_S001...) can be loaded once per UI session, and
 //    /reload unloads them all. We write a snapshot into the next few slots the addon
 //    will load.
 //  * Sound files bigger than the client's cacheable size (Sound_MaxCacheableSizeInBytes,
@@ -22,7 +22,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { luaAssignment } from './luaser.js';
 
-export const ADDON = 'T3Code';
+export const ADDON = 'Orca';
 export const INTERFACE = '16001';
 
 export function slotName(i) {
@@ -134,7 +134,7 @@ export class SlotBank {
   // unchanging files: one fixed fingerprint, checked against CurseForge once.
   //
   // No `## Dependencies` either: WowUp hides an unrecognised load-on-demand folder only
-  // when all its dependencies are recognised, and T3Code isn't on its sites, so a
+  // when all its dependencies are recognised, and Orca isn't on its sites, so a
   // dependency on it listed every slot as an unknown addon. The game doesn't need it.
   slotToc() {
     return [
@@ -180,7 +180,7 @@ export class SlotBank {
       const name = slotName(i);
       ensure(path.join(this.addonsDir, name, `${name}.toc`), this.slotToc(), { refresh: true });
       ensure(path.join(this.addonsDir, name, 'Slot.xml'), this.slotXml(), { refresh: true });
-      ensure(this.slotFile(i), 'T3Code_Inbox = nil\n');
+      ensure(this.slotFile(i), 'Orca_Inbox = nil\n');
     }
     // Only the bells and the two self-test controls are ever played.
     for (let k = BELL_BASE; k < BELL_BASE + BELLS; k++) ensure(this.sigFile(k), '');
@@ -203,7 +203,7 @@ export class SlotBank {
   removeSlots(keep = 0) {
     let removed = 0;
     for (const d of fs.readdirSync(this.addonsDir)) {
-      const m = /^T3Code_S(\d+)$/.exec(d);
+      const m = /^Orca_S(\d+)$/.exec(d);
       if (m && Number(m[1]) > keep) {
         fs.rmSync(path.join(this.addonsDir, d), { recursive: true, force: true });
         removed++;
@@ -219,7 +219,7 @@ export class SlotBank {
   }
 
   write(slotIndexes, value) {
-    const content = luaAssignment('T3Code_Inbox', value);
+    const content = luaAssignment('Orca_Inbox', value);
     for (const i of slotIndexes) {
       if (i < 1 || i > this.slots) continue;
       if (!replaceFile(this.slotFile(i), content)) throw new FileInUse(this.slotFile(i));

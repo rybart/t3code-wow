@@ -1,16 +1,16 @@
 ## Interface: 16001
 ## Title: Orca
-## Group: T3Code
-## Notes: Watch your Orca agents and start new ones from inside the game. Needs the t3code-wow bridge running on this computer.
+## Group: Orca
+## Notes: Watch your Orca agents and start new ones from inside the game. Needs the orca-wow bridge running on this computer.
 ## Author: Ryan Hughes
 ## Version: 0.5.0
 ## X-License: MIT
 ## X-Website: https://github.com/ryanrhughes/t3code-wow
-## IconTexture: Interface\AddOns\T3Code\Media\icon
-## SavedVariables: T3CodeDB
-## AddonCompartmentFunc: T3Code_OnAddonCompartmentClick
-## AddonCompartmentFuncOnEnter: T3Code_OnAddonCompartmentEnter
-## AddonCompartmentFuncOnLeave: T3Code_OnAddonCompartmentLeave
+## IconTexture: Interface\AddOns\Orca\Media\icon
+## SavedVariables: OrcaDB
+## AddonCompartmentFunc: Orca_OnAddonCompartmentClick
+## AddonCompartmentFuncOnEnter: Orca_OnAddonCompartmentEnter
+## AddonCompartmentFuncOnLeave: Orca_OnAddonCompartmentLeave
 ## OptionalDeps: Blizzard_ObjectiveTracker
 
 Core\Codec.lua

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// t3code-wow: install and run the T3 Code bridge for World of Warcraft: Forever.
+// orca-wow: install and run the T3 Code bridge for World of Warcraft: Forever.
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -21,9 +21,9 @@ const BRIDGE_ROOT = path.resolve(HERE, '..');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 const MAC = process.platform === 'darwin';
 const WIN = process.platform === 'win32';
-const DATA_DIR = path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local/share'), 't3code-wow');
-const BIN_LINK = path.join(os.homedir(), '.local/bin/t3code-wow');
-const BIN_SHIM = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData/Local'), 'Microsoft/WindowsApps/t3code-wow.cmd');
+const DATA_DIR = path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local/share'), 'orca-wow');
+const BIN_LINK = path.join(os.homedir(), '.local/bin/orca-wow');
+const BIN_SHIM = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData/Local'), 'Microsoft/WindowsApps/orca-wow.cmd');
 const RERUN = WIN ? 'run the install command again' : 'run ./install.sh again';
 const DEFAULT_SLOTS = 1200;
 
@@ -117,12 +117,12 @@ function bridgeCommand() {
       return false;
     }
   });
-  return [(MAC && linked) || process.execPath, path.join(BRIDGE_ROOT, 'bin', 't3code-wow.js'), 'run'];
+  return [(MAC && linked) || process.execPath, path.join(BRIDGE_ROOT, 'bin', 'orca-wow.js'), 'run'];
 }
 
 const systemd = {
-  name: 't3code-wow.service',
-  file: path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'systemd/user', 't3code-wow.service'),
+  name: 'orca-wow.service',
+  file: path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'systemd/user', 'orca-wow.service'),
   kind: 'user service',
   install() {
     fs.mkdirSync(path.dirname(this.file), { recursive: true });
@@ -156,8 +156,8 @@ const systemd = {
 };
 
 const launchd = {
-  name: 't3code-wow',
-  file: path.join(os.homedir(), 'Library/LaunchAgents/t3code-wow.plist'),
+  name: 'orca-wow',
+  file: path.join(os.homedir(), 'Library/LaunchAgents/orca-wow.plist'),
   kind: 'launch agent',
   target: () => `gui/${process.getuid()}`,
   install() {
@@ -202,7 +202,7 @@ const RUNNING_FILE = path.join(STATE_DIR, 'running.json');
 
 const SERVICES = {
   darwin: () => launchd,
-  win32: () => logonTask({ file: path.join(CONFIG_DIR, 't3code-wow.task.xml'), command: [...bridgeCommand().slice(0, 2), 'supervise'], runningFile: RUNNING_FILE }),
+  win32: () => logonTask({ file: path.join(CONFIG_DIR, 'orca-wow.task.xml'), command: [...bridgeCommand().slice(0, 2), 'supervise'], runningFile: RUNNING_FILE }),
 };
 const service = (SERVICES[process.platform] || (() => systemd))();
 
@@ -221,12 +221,46 @@ function syncAddon(addonsDir) {
   return dst;
 }
 
+// The addon was called T3Code before the rename to Orca. Remove that copy and its slot
+// folders, so the game doesn't load both, and carry its saved settings over to Orca's
+// (the game names a SavedVariables file after its addon). Settings already saved under
+// Orca are left alone.
+const OLD_ADDON = 'T3Code';
+function migrateOldAddon(addonsDir, wowDir) {
+  let removed = 0;
+  const slot = new RegExp(`^${OLD_ADDON}_S\\d+$`);
+  if (fs.existsSync(addonsDir)) {
+    for (const d of fs.readdirSync(addonsDir)) {
+      if (d === OLD_ADDON || slot.test(d)) {
+        fs.rmSync(path.join(addonsDir, d), { recursive: true, force: true });
+        removed++;
+      }
+    }
+  }
+  let migrated = 0;
+  let names = [];
+  try {
+    names = fs.readdirSync(path.join(wowDir, 'WTF', 'Account'));
+  } catch {}
+  for (const account of names) {
+    const dir = path.join(wowDir, 'WTF', 'Account', account, 'SavedVariables');
+    const from = path.join(dir, `${OLD_ADDON}.lua`);
+    const to = path.join(dir, `${ADDON}.lua`);
+    if (!fs.existsSync(from) || fs.existsSync(to)) continue;
+    fs.writeFileSync(to, fs.readFileSync(from, 'utf8').replaceAll(`${OLD_ADDON}DB`, `${ADDON}DB`));
+    migrated++;
+  }
+  return { removed, migrated };
+}
+
 async function cmdInstall(args) {
   const cfg = readConfig();
   const wowDir = resolveWowDir(args, cfg);
   const addonsDir = addonsDirOf(wowDir);
   console.log(`${C.b('World of Warcraft:')} ${wowDir}`);
   fs.mkdirSync(addonsDir, { recursive: true });
+  const old = migrateOldAddon(addonsDir, wowDir);
+  if (old.removed) console.log(`${C.g('✓')} Removed the old T3Code addon (${old.removed} folders)${old.migrated ? ' and moved its settings to Orca' : ''}`);
 
   // The game only discovers new addon folders and sound files when it starts.
   const freshAddon = !fs.existsSync(path.join(addonsDir, ADDON, `${ADDON}.toc`));
@@ -247,7 +281,7 @@ async function cmdInstall(args) {
 
   if (next.backend === 't3') {
     if (!findT3Cli()) {
-      console.log(C.r('✗ The `t3` command was not found. Open T3 Code once (it installs `t3`), then run `t3code-wow install` again.'));
+      console.log(C.r('✗ The `t3` command was not found. Open T3 Code once (it installs `t3`), then run `orca-wow install` again.'));
       process.exitCode = 1;
       return;
     }
@@ -262,7 +296,7 @@ async function cmdInstall(args) {
     // This fork watches Orca: it needs only Orca's own CLI, which needs no session.
     const cli = findOrcaCli();
     if (!cli) {
-      console.log(C.r('✗ The `orca` command was not found. Install Orca, or set ORCA_CLI to its path, then run `t3code-wow install` again.'));
+      console.log(C.r('✗ The `orca` command was not found. Install Orca, or set ORCA_CLI to its path, then run `orca-wow install` again.'));
       process.exitCode = 1;
       return;
     }
@@ -271,7 +305,7 @@ async function cmdInstall(args) {
 
   if (!args['no-service']) {
     if (!service.install()) {
-      console.log(C.r(`✗ The bridge's ${service.kind} didn't start (the error is above). Fix that, then run \`t3code-wow install\` again.`));
+      console.log(C.r(`✗ The bridge's ${service.kind} didn't start (the error is above). Fix that, then run \`orca-wow install\` again.`));
       process.exitCode = 1;
       return;
     }
@@ -339,7 +373,7 @@ async function firstLaunch({ restart, running, waiting, since }) {
       const enc = readStatus()?.addon?.encrypted;
       console.log(`${C.g('✓')} Connected: the game and the bridge are talking${enc ? ' over an encrypted link' : ''}.`);
     } else if (!skipped) {
-      console.log(C.y('The game hasn\'t checked in yet. Once you\'re in, `t3code-wow status` shows whether it connected.'));
+      console.log(C.y('The game hasn\'t checked in yet. Once you\'re in, `orca-wow status` shows whether it connected.'));
     }
   }
   console.log(`
@@ -349,10 +383,10 @@ ${C.b('In game')}
   /orca selftest            check the link step by step if something seems off
 
 ${C.b('From here')}
-  t3code-wow env add <host>   show threads from another machine (T3 Connect)
-  t3code-wow status           what the bridge sees
+  orca-wow env add <host>   show threads from another machine (T3 Connect)
+  orca-wow status           what the bridge sees
   rerun the install command   update
-  t3code-wow uninstall        remove everything`);
+  orca-wow uninstall        remove everything`);
 }
 
 function cmdSync(args) {
@@ -393,7 +427,7 @@ function cmdStatus(args) {
   try {
     st = JSON.parse(fs.readFileSync(path.join(STATE_DIR, 'status.json'), 'utf8'));
   } catch {
-    console.log(C.r('The bridge has not run yet.'), 'Start it with `t3code-wow install` or `t3code-wow run`.');
+    console.log(C.r('The bridge has not run yet.'), 'Start it with `orca-wow install` or `orca-wow run`.');
     process.exitCode = 1;
     return;
   }
@@ -440,7 +474,7 @@ async function cmdProbe() {
   console.log(`backend: ${cap.resolveBackend()}; WoW pid: ${proc?.pid ?? 'not running'}`);
   const res = await cap.grab(proc?.pid);
   if (res.status !== 'ok') return console.log(`capture: ${res.status}`);
-  const out = path.join(os.tmpdir(), 't3code-wow-probe.ppm');
+  const out = path.join(os.tmpdir(), 'orca-wow-probe.ppm');
   const img = res.image;
   fs.writeFileSync(out, Buffer.concat([Buffer.from(`P6\n${img.width} ${img.height}\n255\n`), Buffer.from(img.data)]));
   let png = out;
@@ -483,7 +517,7 @@ async function cmdUninstall(args) {
     console.log('This removes T3 Code for World of Warcraft: the addon and its update folders, its settings in the game,');
     console.log('the bridge service, the bridge\'s T3 Code sessions (on every machine it was added to) and its files.');
     if (!(await ask('Remove it? [y/N] '))) {
-      console.log(process.stdin.isTTY ? 'Nothing removed.' : 'Nothing removed. Run `t3code-wow uninstall --yes` to remove without asking.');
+      console.log(process.stdin.isTTY ? 'Nothing removed.' : 'Nothing removed. Run `orca-wow uninstall --yes` to remove without asking.');
       return;
     }
   }
@@ -557,7 +591,7 @@ async function cmdUninstall(args) {
   } catch {}
   if (WIN && shimIsOurs()) fs.rmSync(BIN_SHIM, { force: true });
   fs.rmSync(DATA_DIR, { recursive: true, force: true });
-  done('Removed the t3code-wow command and its files');
+  done('Removed the orca-wow command and its files');
 
   if (await findWowProcess()) console.log(`\nWorld of Warcraft is running: ${C.b('/reload')} or restart it to finish unloading T3 Code.`);
 }
@@ -582,12 +616,12 @@ async function cmdEnv(args) {
       }
       console.log(`${C.b(e.label)} ${state} ${C.d(`· ssh ${e.ssh || '-'} · token ${tok?.expiresAt ? `until ${tok.expiresAt.slice(0, 10)}` : 'missing'}`)}`);
     }
-    if (!cfg.environments.length) console.log(C.d('No other machines yet. Add one with: t3code-wow env add <tailscale or ssh host> [--url https://...]'));
+    if (!cfg.environments.length) console.log(C.d('No other machines yet. Add one with: orca-wow env add <tailscale or ssh host> [--url https://...]'));
     return;
   }
   if (sub === 'add') {
     const host = args._[2];
-    if (!host) throw new Error('usage: t3code-wow env add <host> [--url https://...] [--ssh <ssh host>]');
+    if (!host) throw new Error('usage: orca-wow env add <host> [--url https://...] [--ssh <ssh host>]');
     const ssh = args.ssh ? String(args.ssh) : host;
     const urls = [];
     for (const u of [].concat(args.url || [])) urls.push(String(u).replace(/\/?$/, '/'));
@@ -608,13 +642,13 @@ async function cmdEnv(args) {
     }
     if (!ident) throw new Error(`no T3 Code server answered at ${urls.join(', ')}`);
     if (ident.orchestrationProtocolVersion !== 2) throw new Error(`${ident.label} runs an incompatible T3 Code (protocol ${ident.orchestrationProtocolVersion}); update it`);
-    const local = JSON.parse(await (await fetch(new URL('/.well-known/t3/environment', JSON.parse(fs.readFileSync(path.join(process.env.T3CODE_HOME || path.join(os.homedir(), '.t3'), 'userdata', 'server-runtime.json'), 'utf8')).origin))).text());
+    const local = JSON.parse(await (await fetch(new URL('/.well-known/t3/environment', JSON.parse(fs.readFileSync(path.join(process.env.ORCA_HOME || path.join(os.homedir(), '.t3'), 'userdata', 'server-runtime.json'), 'utf8')).origin))).text());
     if (ident.environmentId === local.environmentId) throw new Error(`${host} is this computer`);
     console.log(`${C.g('✓')} Found ${C.b(ident.label)} (${ident.platform?.machine || 'machine'}, T3 Code ${ident.serverVersion}) at ${good.join(', ')}`);
     process.stdout.write(`… Creating a T3 Code session on ${ident.label} over SSH (${ssh})\r`);
     const tok = await mintRemote(ssh, `WoW bridge (${local.label || os.hostname()})`);
     saveToken(ident.environmentId, tok);
-    console.log(`${C.g('✓')} Session created on ${ident.label} ${C.d(`(revoke with t3code-wow env remove ${ident.label})`)}`);
+    console.log(`${C.g('✓')} Session created on ${ident.label} ${C.d(`(revoke with orca-wow env remove ${ident.label})`)}`);
     const existing = cfg.environments.find((e) => e.id === ident.environmentId);
     const used = new Set(cfg.environments.map((e) => e.code));
     let code = existing?.code;
@@ -629,7 +663,7 @@ async function cmdEnv(args) {
   if (sub === 'remove') {
     const name = args._[2];
     const e = cfg.environments.find((x) => x.label === name || x.id === name || x.ssh === name);
-    if (!e) throw new Error(`no machine called ${name}; see t3code-wow env list`);
+    if (!e) throw new Error(`no machine called ${name}; see orca-wow env list`);
     const tok = readTokenData(e.id);
     if (tok?.sessionId && e.ssh) {
       try {
@@ -646,28 +680,28 @@ async function cmdEnv(args) {
     console.log(`${C.g('✓')} Removed ${e.label}`);
     return;
   }
-  throw new Error('usage: t3code-wow env [list|add <host>|remove <name>]');
+  throw new Error('usage: orca-wow env [list|add <host>|remove <name>]');
 }
 
 function help() {
-  console.log(`${C.b('t3code-wow')} ${VERSION} — T3 Code inside World of Warcraft: Forever
+  console.log(`${C.b('orca-wow')} ${VERSION} — T3 Code inside World of Warcraft: Forever
 
-  t3code-wow install [--wow DIR] [--slots N] [--no-service]
+  orca-wow install [--wow DIR] [--slots N] [--no-service]
                      Install the addon, its live-update slots and the bridge service
-  t3code-wow status [--log] [--json]
+  orca-wow status [--log] [--json]
                      Show what the bridge sees
-  t3code-wow sync        Re-copy the installed addon into the game (to update, rerun the install command)
-  t3code-wow run [--verbose]
+  orca-wow sync        Re-copy the installed addon into the game (to update, rerun the install command)
+  orca-wow run [--verbose]
                      Run the bridge in the foreground (the service runs this)
-  t3code-wow env [list]  Other T3 Code machines shown in game (T3 Connect / Tailscale)
-  t3code-wow env add <host> [--url https://...] [--ssh <ssh host>]
+  orca-wow env [list]  Other T3 Code machines shown in game (T3 Connect / Tailscale)
+  orca-wow env add <host> [--url https://...] [--ssh <ssh host>]
                      Show another machine's threads too (finds it on Tailscale,
                      creates its session over SSH)
-  t3code-wow env remove <name>
+  orca-wow env remove <name>
                      Stop showing a machine and revoke the bridge's session there
-  t3code-wow probe       Capture the corner of the game window and try to read the strip
-  t3code-wow screenshot  Save a screenshot of the game window and print its path (--out <file>)
-  t3code-wow uninstall [--yes]
+  orca-wow probe       Capture the corner of the game window and try to read the strip
+  orca-wow screenshot  Save a screenshot of the game window and print its path (--out <file>)
+  orca-wow uninstall [--yes]
                      Remove the addon, its settings, the service, the bridge's
                      T3 Code sessions and its files`);
 }

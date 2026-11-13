@@ -118,7 +118,7 @@ end
 
 function K:Create()
 	if self.frame then return end
-	local f = CreateFrame("Frame", "T3CodeTracker", UIParent)
+	local f = CreateFrame("Frame", "OrcaTracker", UIParent)
 	f:SetSize(WIDTH, 40)
 	f:SetFrameStrata("LOW")
 	f:SetClampedToScreen(true)
@@ -198,7 +198,7 @@ function K:Refresh(resetPosition)
 	if state == "exhausted" then
 		notice = { text = "Live updates paused", sub = "Click to /reload", action = function() ReloadUI() end }
 	elseif #entries > 0 and (state == "stale" or state == "t3offline") then
-		notice = { text = "Connection lost", sub = state == "stale" and "Is t3code-wow running?" or "Orca is offline" }
+		notice = { text = "Connection lost", sub = state == "stale" and "Is orca-wow running?" or "Orca is offline" }
 	end
 
 	if #entries == 0 and not notice and not s.trackerAlways then

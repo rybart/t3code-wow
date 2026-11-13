@@ -2,7 +2,7 @@
 -- Namespace, saved settings, small helpers and an internal event bus.
 
 local addonName, ns = ...
-T3Code = ns
+Orca = ns
 
 ns.name = addonName
 ns.version = C_AddOns.GetAddOnMetadata(addonName, "Version") or "dev"
@@ -211,9 +211,9 @@ frame:RegisterEvent("PLAYER_REGEN_DISABLED")
 frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 frame:SetScript("OnEvent", ns.Safe(function(_, event, arg1, ...)
 	if event == "ADDON_LOADED" and arg1 == addonName then
-		T3CodeDB = T3CodeDB or {}
-		ApplyDefaults(T3CodeDB, DEFAULTS)
-		ns.db = T3CodeDB
+		OrcaDB = OrcaDB or {}
+		ApplyDefaults(OrcaDB, DEFAULTS)
+		ns.db = OrcaDB
 		if not ns.db.session then ns.db.session = RandomToken(8) end
 		-- One token per UI session: the bridge uses it to notice /reload.
 		ns.ui = RandomToken(6)

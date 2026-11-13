@@ -1,12 +1,12 @@
 // The bridge's T3 session token. Minted with the user's own `t3` CLI, stored 0600
-// under ~/.config/t3code-wow, renewed a week before it expires.
+// under ~/.config/orca-wow, renewed a week before it expires.
 
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-export const CONFIG_DIR = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 't3code-wow');
+export const CONFIG_DIR = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'orca-wow');
 export const TOKEN_FILE = path.join(CONFIG_DIR, 'token');
 
 const RENEW_BEFORE_MS = 7 * 24 * 3600 * 1000;

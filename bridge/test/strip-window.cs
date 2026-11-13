@@ -8,7 +8,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace T3CodeWow {
+namespace OrcaWow {
   public static class StripWindow {
     [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr context);
     [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr hwnd);

@@ -1,4 +1,4 @@
--- The game's AddOns list: hide the live-update slot addons (T3Code_S###), which
+-- The game's AddOns list: hide the live-update slot addons (Orca_S###), which
 -- would otherwise fill it with over a thousand entries. Only the list's data is
 -- filtered; the slots stay enabled and load on demand as before.
 
@@ -11,7 +11,7 @@ local function HideTransportSlots(provider)
 	for _, node in provider:EnumerateEntireRange() do
 		local data = node.GetData and node:GetData() or node
 		local name = data.addonIndex and C_AddOns.GetAddOnInfo(data.addonIndex)
-		if name and name:match("^T3Code_S%d+$") then
+		if name and name:match("^Orca_S%d+$") then
 			remove[#remove + 1] = node
 		end
 	end

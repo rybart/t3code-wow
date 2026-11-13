@@ -1,4 +1,4 @@
-<!-- Written by t3code-wow each time the bridge starts: edits here are replaced. Put your own notes in NOTES.md. -->
+<!-- Written by orca-wow each time the bridge starts: edits here are replaced. Put your own notes in NOTES.md. -->
 
 # WoW Assistant
 

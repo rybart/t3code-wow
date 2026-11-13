@@ -1,5 +1,5 @@
 {
-  "name": "t3code-wow",
+  "name": "orca-wow",
   "version": "0.5.0",
   "description": "Bridge between the T3 Code addon for World of Warcraft: Forever and a running T3 Code server. Early release, experimental.",
   "homepage": "https://github.com/ryanrhughes/t3code-wow",
@@ -15,14 +15,14 @@
   "type": "module",
   "private": true,
   "bin": {
-    "t3code-wow": "bin/t3code-wow.js"
+    "orca-wow": "bin/orca-wow.js"
   },
   "engines": {
     "node": ">=22"
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "start": "node bin/t3code-wow.js run"
+    "start": "node bin/orca-wow.js run"
   },
   "license": "MIT"
 }
