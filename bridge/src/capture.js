@@ -134,7 +134,7 @@ function run(argv) {
     const owner = v('kCGWindowOwnerName');
     const wpid = v('kCGWindowOwnerPID');
     if (wpid !== pid && owner !== 'Wow' && owner !== 'World of Warcraft') continue;
-    windows.push({ pid: wpid, layer: v('kCGWindowLayer'), onscreen: !!v('kCGWindowIsOnscreen'), bounds: ObjC.deepUnwrap(w.objectForKey('kCGWindowBounds')) });
+    windows.push({ id: v('kCGWindowNumber'), pid: wpid, layer: v('kCGWindowLayer'), onscreen: !!v('kCGWindowIsOnscreen'), bounds: ObjC.deepUnwrap(w.objectForKey('kCGWindowBounds')) });
   }
   const screens = $.NSScreen.screens.js.map((s) => ({ x: s.frame.origin.x, y: s.frame.origin.y, width: s.frame.size.width, height: s.frame.size.height, scale: s.backingScaleFactor }));
   return JSON.stringify({ windows, screens });
@@ -156,7 +156,7 @@ export function pickMacWindow(info, pid) {
   const cx = b.X + b.Width / 2;
   const cy = b.Y + b.Height / 2;
   const screen = screens.find((s) => cx >= s.x && cx < s.x + s.width && cy >= s.y && cy < s.y + s.height) || screens[0];
-  return { found: true, visible: win.onscreen, x: b.X, y: b.Y, width: b.Width, height: b.Height, scale: screen?.scale || 1 };
+  return { found: true, id: win.id, visible: win.onscreen, x: b.X, y: b.Y, width: b.Width, height: b.Height, scale: screen?.scale || 1 };
 }
 
 // ---------------------------------------------------------------------------
@@ -340,6 +340,23 @@ export class StripCapture {
     return path.join(this.tmpDir, name);
   }
 
+  // One window's own pixels, even while other windows cover it, without its shadow.
+  async macCaptureWindow(id, type) {
+    const file = this.tmpFile(`window.${type}`);
+    try {
+      await run('screencapture', ['-x', '-o', '-l', String(id), '-t', type, file], { timeout: 8000 });
+      return fs.readFileSync(file);
+    } catch (err) {
+      if (/could not create image/i.test(`${err.stderr || ''}${err.message}`)) {
+        this.requestScreenAccess();
+        throw new Error(SCREEN_PERMISSION_HELP);
+      }
+      throw err;
+    } finally {
+      fs.rmSync(file, { force: true });
+    }
+  }
+
   // `screencapture` writes a file; read it back and remove it. Rect is in points.
   async macCapture(rect, type) {
     const file = this.tmpFile(`capture.${type}`);
@@ -463,10 +480,11 @@ export class StripCapture {
     }
     if (backend === 'macos') {
       const win = await this.macWindow(wowPid);
-      // screencapture copies a rectangle of the screen, so a hidden game would attach
-      // whatever is showing there instead.
+      // Capture the game window itself (-l): a rectangle of the screen would take whatever
+      // covers the game, such as another app's window, and send it with the screenshot.
       if (!win.visible) throw new Error("the game window isn't on screen");
-      let data = await this.macCapture([win.x, win.y, win.width, win.height], 'jpg');
+      if (!win.id) throw new Error("couldn't identify the game window to capture it");
+      let data = await this.macCaptureWindow(win.id, 'jpg');
       // Retina captures come back at twice the size; keep them at the logical size.
       if (win.scale > 1) {
         const file = this.tmpFile(name);
