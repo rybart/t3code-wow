@@ -30,6 +30,7 @@ UI\Usage.lua
 UI\Settings.lua
 UI\Tracker.lua
 UI\AskPanel.lua
+UI\ChatTab.lua
 UI\Toasts.lua
 UI\Minimap.lua
 UI\AddonList.lua

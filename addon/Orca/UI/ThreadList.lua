@@ -103,6 +103,10 @@ local function CreateRow(button)
 			GameTooltip:AddLine(" ")
 			GameTooltip:AddLine(t.last, 0.9, 0.9, 0.9, true)
 		end
+		GameTooltip:AddLine(" ")
+		if ns.Tracker:IsHidden(t.p) then GameTooltip:AddLine("Its workspace isn't shown in the tracker.", 1, 0.6, 0.2, true) end
+		if ns.ChatTab:IsPinned(t.id) then GameTooltip:AddLine("Pinned to a chat tab.", 0.45, 0.72, 1, true) end
+		GameTooltip:AddLine("Right-click: pin to chat, tracker on or off.", 0.5, 0.5, 0.5, true)
 		GameTooltip:Show()
 	end)
 	button:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -139,10 +143,40 @@ local function InitRow(button, ed)
 	else
 		button.Age:SetText(ns.Ago(t.u))
 	end
-	button:SetScript("OnClick", function()
+	button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+	button:SetScript("OnClick", function(_, mouse)
+		-- Right-click: a small menu (the addon's own list, not the game's menu, which taints).
+		if mouse == "RightButton" then
+			GameTooltip:Hide()
+			L:OpenRowMenu(button, t)
+			return
+		end
 		PlaySound(SOUNDKIT.IG_QUEST_LOG_OPEN or SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
 		ns.Main:SelectThread(t.id)
 	end)
+end
+
+-- What a right-click on an agent offers.
+function L:RowMenuOptions(t)
+	local options = {}
+	if ns.Store:IsOrca() and not (Chattynator and Chattynator.API) then
+		table.insert(options, ns.ChatTab:IsPinned(t.id) and { value = "unpin", label = "Unpin from chat" } or { value = "pin", label = "Pin to a chat tab" })
+	end
+	table.insert(options, ns.Tracker:IsHidden(t.p) and { value = "track", label = "Show its workspace in the tracker" } or { value = "untrack", label = "Hide its workspace from the tracker" })
+	return options
+end
+
+function L:OpenRowMenu(button, t)
+	button.options = self:RowMenuOptions(t)
+	button.value = nil
+	button.listWidth = 240
+	button.Update = button.Update or function() end
+	button.onChange = function(value)
+		if value == "pin" then ns.ChatTab:Pin(t.id)
+		elseif value == "unpin" then ns.ChatTab:Unpin(t.id)
+		elseif value == "track" or value == "untrack" then ns.Tracker:ToggleWorkspace(t.p) end
+	end
+	UI.OpenList(button)
 end
 
 function L:Create(parent)

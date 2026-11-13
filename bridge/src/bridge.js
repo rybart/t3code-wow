@@ -642,6 +642,14 @@ export class Bridge {
           if (!msg) ok = null;
           break;
         }
+        case 'watch': {
+          // watch [<id>,<id>...]: the pinned chat tabs showing now; their conversations
+          // ride along with each update until the next watch.
+          this.watched = new Set(String(a0 || '').split(',').filter(Boolean).slice(0, 4));
+          for (const id of this.watched) this.refreshView(id, true);
+          ok = null;
+          break;
+        }
         case 'merge': {
           // merge <thread>: its workspace's PR, only if GitHub needs no override.
           const res = await this.t3.mergePR(a0);
@@ -840,7 +848,7 @@ export class Bridge {
         v.contentKey = [msgs.length, last?.text?.length, last?.updatedAt, pendingRequest(p)?.id, proposedPlan(p)?.length, (p.runs || []).filter((r) => r.status === 'queued').length].join('|');
         const prevSubs = v.subs;
         v.subs = (p.subagents || []).map((a) => a.status).join();
-        const shown = threadId === this.client?.view || (this.askOpen() && threadId === this.assistant?.threadId());
+        const shown = threadId === this.client?.view || (this.askOpen() && threadId === this.assistant?.threadId()) || this.watching(threadId);
         if (shown) this.markDirty(v.contentKey !== prevContent ? 'view' : 'minor');
         else if (activityLabel(p) !== prevLabel || v.subs !== prevSubs) this.markDirty('minor');
         // An open subagent's status lives on its parent, so keep the parent loaded too.
@@ -881,7 +889,7 @@ export class Bridge {
       this.prevStatus.set(t.id, status);
       // The open thread, the parent an open subagent takes its status from, or the
       // assistant while the Ask panel shows it.
-      if ((this.askOpen() && t.id === this.assistant?.threadId()) || t.id === this.client?.view || t.id === this.t3.threads.get(this.client?.view)?._from?.key) this.refreshView(t.id);
+      if ((this.askOpen() && t.id === this.assistant?.threadId()) || this.watching(t.id) || t.id === this.client?.view || t.id === this.t3.threads.get(this.client?.view)?._from?.key) this.refreshView(t.id);
       else if (ACTIVE.has(status)) this.refreshView(t.id);
       if (before !== status) {
         this.markDirty('important');
@@ -910,11 +918,28 @@ export class Bridge {
     return Boolean(this.client?.flags?.includes('k'));
   }
 
-  // The assistant's latest exchanges for the Ask panel: the last few messages, what it's
-  // doing, and whether it's waiting on an answer only the full window can give.
+  // The assistant's latest exchanges for the Ask panel and its chat tab.
   askSection() {
     const id = this.assistant?.threadId();
     if (!id || !this.askOpen()) return undefined;
+    return this.chatSection(id);
+  }
+
+  // Agents pinned to chat tabs that are showing in the game (the addon's `watch`).
+  watching(id) {
+    return Boolean(id && this.watched?.has(id));
+  }
+
+  chatsSection() {
+    if (!this.watched?.size) return undefined;
+    const out = {};
+    for (const id of this.watched) if (this.t3.threads.has(id)) out[id] = this.chatSection(id);
+    return Object.keys(out).length ? out : undefined;
+  }
+
+  // A thread's latest exchanges, as chat: the last few messages, what it's doing, and
+  // whether it's waiting on an answer only the full window can give.
+  chatSection(id) {
     const t = this.t3.threads.get(id);
     const p = this.views.get(id)?.projection;
     if (!p) return { id, loading: true };
@@ -1092,6 +1117,7 @@ export class Bridge {
       view,
       fam,
       askv: this.askSection(),
+      chats: this.chatsSection(),
       usage,
       dict: this.dictation,
       newShots: this.shots.get('new')?.length || undefined,
@@ -1231,7 +1257,7 @@ export class Bridge {
     const c = this.client;
     const since = Date.now() - this.lastPublishAt;
     // The Ask panel ("k") counts as an open window the player is watching.
-    const panel = Boolean(c?.flags.includes('k'));
+    const panel = Boolean(c?.flags.includes('k')) || Boolean(this.watched?.size);
     const open = c?.flags.includes('o') || panel;
     const attending = open && (c.flags.includes('a') || panel);
     const total = Math.min(this.bank.slots, c?.slotCount || this.bank.slots);

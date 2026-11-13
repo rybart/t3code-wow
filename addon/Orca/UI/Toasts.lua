@@ -137,7 +137,8 @@ local function Notify(t, kind, quietSound)
 	local s = ns.db.settings
 	if not quietSound then Sound(kind == "prfail" and "failed" or kind) end
 	-- Already on screen: the open window's thread, or the assistant in the Ask panel.
-	local viewing = (ns.windowOpen and ns.viewId == t.id) or (ns.askOpen and ns.Store:IsAssistant(t.id))
+	local viewing = (ns.windowOpen and ns.viewId == t.id) or (ns.AskPanel and ns.AskPanel:Showing() and ns.Store:IsAssistant(t.id))
+		or (ns.ChatTab and ns.ChatTab:IsShowingThread(t.id))
 	if s.toasts and not viewing then N:Show(t, kind) end
 	-- Desktop voice is handled by the bridge (flag "r"); the game's voice here.
 	if s.autoRead and ns.SpeechEngine() == "game" and VERBS[kind] then
@@ -170,8 +171,24 @@ end)
 -- A workspace's pull request: checks failed or passed, or it merged. Shown on one of its
 -- agents, so clicking the notice opens that agent.
 local PR_VERBS = { prfail = "has failing checks", prpass = "passed its checks", merged = "was merged", prready = "is ready to merge" }
+-- Agents idle longer than this don't make PR notices: their workspaces are old work.
+local PR_RECENT = 3 * 24 * 3600
+
 ns:On("PRTransition", function(t, kind)
 	if not ns.db.settings.prNotices then return end
+	local busy = t.s == "working" or t.s == "waiting" or t.s == "input"
+	if not busy and (not t.u or time() - t.u > PR_RECENT) then return end
+	-- "Ready to merge" once per PR, ever: the bridge only learns it a little after starting,
+	-- so each restart would otherwise say it again.
+	if kind == "prready" then
+		ns.db.prReadySaid = ns.db.prReadySaid or {}
+		if ns.db.prReadySaid[t.pr.n] then return end
+		ns.db.prReadySaid[t.pr.n] = time()
+		-- Forget ones from long ago.
+		for n, at in pairs(ns.db.prReadySaid) do
+			if time() - at > 60 * 24 * 3600 then ns.db.prReadySaid[n] = nil end
+		end
+	end
 	ns.Print(string.format("PR #%s (%s) %s.", tostring(t.pr.n), ns.Store:ProjectName(t.p), PR_VERBS[kind]))
 	if ns.IsQuiet() then
 		table.insert(N.held, { t = t, kind = kind })
@@ -184,6 +201,11 @@ end)
 -- Logging in (or a /reload): what the agents did meanwhile, in one chat line. Quiet when
 -- nothing waits on the player.
 ns:On("FirstLive", function()
+	-- PRs already ready when the game connects aren't news.
+	ns.db.prReadySaid = ns.db.prReadySaid or {}
+	for _, t in ipairs(ns.Store.data.threads or {}) do
+		if t.pr and t.pr.ok and not ns.db.prReadySaid[t.pr.n] then ns.db.prReadySaid[t.pr.n] = time() end
+	end
 	if not ns.db.settings.awaySummary then return end
 	local finished, needs, working = 0, 0, 0
 	for _, t in ipairs(ns.Store.data.threads or {}) do

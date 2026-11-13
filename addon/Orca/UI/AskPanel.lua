@@ -158,17 +158,15 @@ function A:Create()
 	f.Ask = ask
 
 	f:SetScript("OnShow", ns.Safe(function()
-		ns.askOpen = true
+		A:UpdateOpen()
 		if A.icon then A.icon.Badge:Hide() end
-		ns.Transport:Touch()
 		A:Refresh()
 		-- The elapsed time while the assistant works.
 		A.ticker = C_Timer.NewTicker(1, function() A:Refresh() end)
 	end))
 	f:SetScript("OnHide", ns.Safe(function()
-		ns.askOpen = false
 		if A.ticker then A.ticker:Cancel() A.ticker = nil end
-		ns.Transport:Touch()
+		A:UpdateOpen()
 	end))
 	RestorePoint(f, "askPanelPoint", { "CENTER", UIParent, "CENTER", 260, 60 })
 	self.frame = f
@@ -196,6 +194,21 @@ function A:IsOpen()
 	return self.frame ~= nil and self.frame:IsShown()
 end
 
+-- Whether the assistant's conversation shows anywhere: this panel or its chat tab.
+function A:Showing()
+	return self:IsOpen() or (ns.ChatTab and ns.ChatTab:IsVisible()) or false
+end
+
+-- The hello's "k": the bridge sends the assistant's messages while the conversation shows,
+-- or while an answer to a question asked elsewhere (/ai) is still on its way.
+function A:UpdateOpen()
+	local open = self:Showing() or self.awaiting ~= nil
+	if open ~= (ns.askOpen and true or false) then
+		ns.askOpen = open
+		ns.Transport:Touch()
+	end
+end
+
 -- The assistant's thread, once its chat exists.
 function A:ThreadId()
 	local b = ns.Store.data.bridge
@@ -217,9 +230,12 @@ function A:Send(textOverride)
 	end
 	if not sent then return end -- too long; the box keeps it
 	-- Shown at once; the bridge's copy replaces it when it arrives.
-	self.echo = { q = ns.GameContext.Clean(text), since = time(), answers = self:AnswerCount() }
+	self.echo = { q = ns.GameContext.Clean(text), since = time() }
+	-- Asked with neither the panel nor the tab showing (/ai): the answer goes to chat.
+	if not self:Showing() then self.awaiting = { since = self.echo.since } end
+	self:UpdateOpen()
 	self.shots = nil
-	if self.box then
+	if self.box and not textOverride then
 		self.box:SetText("")
 		self.box:ClearFocus()
 	end
@@ -235,36 +251,56 @@ function A:Screenshot()
 	self:Refresh()
 end
 
-function A:AnswerCount()
-	local n = 0
-	local v = ns.Store.data.askv
-	for _, m in ipairs(v and v.msgs or {}) do
-		if m.r == "a" then n = n + 1 end
+-- Where a question sent at `since` stands in the bridge's copy of the conversation: the
+-- index of its message once it's there, and the answer after it, if any. The bridge
+-- sends only the last few messages, so this goes by the question's time, not by how many
+-- answers there are. (The desktop and the game read the same clock.)
+function A:QuestionSince(since)
+	local msgs = ns.Store.data.askv and ns.Store.data.askv.msgs or {}
+	for i = #msgs, 1, -1 do
+		local m = msgs[i]
+		if m.r == "u" and m.at and m.at >= since - 5 then
+			for j = i + 1, #msgs do
+				if msgs[j].r == "a" then return i, msgs[j], j == #msgs end
+			end
+			return i, nil
+		end
 	end
-	return n
 end
 
--- What the conversation area shows: the last few exchanges, then the question just sent
--- until the bridge has it.
-function A:Lines()
+-- The conversation as both views show it: the last few exchanges ({ r = "u"|"a", t }),
+-- then the question just sent until the bridge has it; and a status line while the
+-- assistant works or waits on the player.
+function A:Entries()
 	local v = ns.Store.data.askv
-	local lines = {}
-	for _, m in ipairs(v and v.msgs or {}) do
-		if m.r == "u" then
-			table.insert(lines, ns.Color("gold", "You: ") .. m.t)
-		else
-			table.insert(lines, m.t)
-		end
-	end
+	local entries = {}
+	for _, m in ipairs(v and v.msgs or {}) do table.insert(entries, { r = m.r, t = m.t }) end
 	local echo = self.echo
 	if echo then
-		local last = v and v.msgs and v.msgs[#v.msgs]
-		local arrived = last and last.r == "u" and last.at and last.at >= echo.since - 5
-		if self:AnswerCount() > echo.answers then
-			self.echo = nil
-		elseif not arrived then
-			table.insert(lines, ns.Color("gold", "You: ") .. echo.q)
+		local index, answer = self:QuestionSince(echo.since)
+		if answer then
+			self.echo = nil -- answered: the bridge's copy shows both
+		elseif not index then
+			table.insert(entries, { r = "u", t = echo.q }) -- not in the bridge's copy yet
 		end
+	end
+	local status
+	if v and v.ask then
+		status = ns.Color("orange", "The WoW Assistant asked you something: /orca ask, then Full view, to answer.")
+	elseif v and v.act then
+		status = ns.Color("grey", "The WoW Assistant is working: " .. v.act)
+	elseif self.echo then
+		status = ns.Color("grey", "The WoW Assistant is thinking…")
+	end
+	return entries, status
+end
+
+-- What the panel's conversation area shows.
+function A:Lines()
+	local entries = self:Entries()
+	local lines = {}
+	for _, e in ipairs(entries) do
+		table.insert(lines, e.r == "u" and (ns.Color("gold", "You: ") .. e.t) or e.t)
 	end
 	if #lines == 0 then
 		return ns.Color("grey", "Ask anything about the game: why it looks dark, which of two items is better (shift-click them into the box), where to go for a quest. It sees your character, location, quests and talents.")
@@ -301,11 +337,25 @@ end
 ns:On("DataChanged", function()
 	A:RefreshIcon()
 	A:Refresh()
+	-- An answer to a question asked with nothing showing: say it in chat, as a whisper.
+	local w = A.awaiting
+	local v = ns.Store.data.askv
+	local _, answer, last = A:QuestionSince(w and w.since or 0)
+	-- The answer, once it's finished (not while the assistant is still writing it).
+	if w and answer and not (last and v and v.act) then
+		A.awaiting = nil
+		if not A:Showing() then ns.ChatTab:PrintAnswer(answer.t) end
+		A:UpdateOpen()
+	elseif w and ns.Store.data.askv and ns.Store.data.askv.ask then
+		A.awaiting = nil
+		ns.Print("The WoW Assistant asked you something. /orca ask, then Full view, to answer.")
+		A:UpdateOpen()
+	end
 end)
 
 -- An answer while the panel is closed: a mark on the icon until it's opened.
 ns:On("ThreadTransition", function(t, before, after)
-	if A.icon and not A:IsOpen() and ns.Store:IsAssistant(t.id) and (after == "open" or after == "input") and before ~= after then
+	if A.icon and not A:Showing() and ns.Store:IsAssistant(t.id) and (after == "open" or after == "input") and before ~= after then
 		A.icon.Badge:Show()
 	end
 end)

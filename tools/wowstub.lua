@@ -48,6 +48,7 @@ local GETTERS = {
 	GetFontHeight = function() return 14 end,
 	GetFrameLevel = function(self) return self._level or 1 end,
 	GetScale = function(self) return self._scale or 1 end,
+	GetAlpha = function(self) return self._alpha or 1 end,
 	GetCenter = function(self) Stub.geo = (Stub.geo or 0) + 1 return 100 + (Stub.geo % 7) * 40, 500 - Stub.geo * 3 end,
 	GetTop = function() return 300 end,
 	GetBottom = function() return 280 end,
@@ -62,6 +63,7 @@ local SETTERS = {
 	SetWidth = function(self, w) self._w = w end,
 	SetHeight = function(self, h) self._h = h end,
 	SetSize = function(self, w, h) self._w, self._h = w, h end,
+	SetAlpha = function(self, a) self._alpha = a end,
 	SetText = function(self, t)
 		self._text = t and tostring(t) or ""
 		self._cursor = nil
@@ -158,6 +160,7 @@ for _, n in ipairs({
 	"SetDataProvider", "ForEachFrame", "ScrollToEnd", "HasScrollableExtent", "GetScrollPercentage", -- ScrollBox
 	"SetCollapsed", -- ObjectiveTrackerModuleHeaderTemplate
 	"SetOwner", "AddLine", "AddDoubleLine", "ClearLines", -- GameTooltip (missing from the generated list)
+	"ScrollToBottom", "ScrollUp", "ScrollDown", -- ScrollingMessageFrameMixin
 	"FindElementDataIndex", "GetDataProviderSize", "FindElementData", "FindFrame", "ScrollToElementDataIndex", "ScrollDecrease", "ScrollIncrease",
 }) do MIXIN[n] = true end
 

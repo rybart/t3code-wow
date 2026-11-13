@@ -410,6 +410,319 @@ do
 	ns.Store:Apply(data)
 end
 
+-- The assistant as a Chattynator tab: registered as a custom tab, it shows the
+-- conversation as whispers with a box of its own; /ai asks from any chat box, and the
+-- answer comes back as a whisper in chat when nothing else shows it.
+do
+	local CT = ns.ChatTab
+	local registered
+	_G.Chattynator = { API = { RegisterCustomTab = function(label, id, install) registered = { label = label, id = id, install = install } end } }
+	CT.registered = nil
+	CT:Register()
+	check(registered and registered.label == "WoW Assistant" and registered.id == "orca_assistant", "Chat tab: registered with Chattynator as a custom tab")
+	data.bridge.orca = true
+	data.bridge.asst = data.threads[1].id
+	ns.Store:Apply(data)
+	local holder = CreateFrame("Frame", nil, UIParent)
+	registered.install(holder)
+	local view = CT.views[#CT.views]
+	check(view and view:GetParent() == holder, "Chat tab: installing makes a view in Chattynator's holder")
+	check(ns.Transport:Flags():find("k", 1, true) ~= nil, "Chat tab: while it shows, the bridge sends the conversation (flag k)")
+	local lines = {}
+	view.Messages.AddMessage = function(_, text, r, g, b) table.insert(lines, text) end
+	view.Messages.Clear = function() lines = {} end
+	local copy = {}
+	for k, v in pairs(data) do copy[k] = v end
+	copy.askv = { id = data.threads[1].id, msgs = { { r = "u", t = "Which helm?", at = time() }, { r = "a", t = "The Crown." } } }
+	ns.Store:Apply(copy)
+	CT:Render(view, true)
+	check(lines[1] == "To [WoW Assistant]: Which helm?" and lines[2] == "[WoW Assistant] whispers: The Crown.", "Chat tab: the conversation reads as whispers")
+	-- Its own box asks the assistant.
+	view.Box:SetText("And gloves?")
+	view.Box:GetScript("OnEnterPressed")(view.Box)
+	local last = ns.Transport.queue[#ns.Transport.queue]
+	check(last.verb == "send" and last.args[1] == data.threads[1].id and last.args[2]:find("^And gloves%?") ~= nil and view.Box:GetText() == "", "Chat tab: its box sends to the assistant")
+	table.remove(ns.Transport.queue)
+	ns.AskPanel.echo = nil
+	view:Hide()
+	ns.AskPanel:UpdateOpen()
+	check(not ns.Transport:Flags():find("k", 1, true), "Chat tab: hidden, the bridge stops sending the conversation")
+	-- /ai with nothing showing: the answer is printed in chat as a whisper.
+	SlashCmdList.ORCAAI("Best bag?")
+	last = ns.Transport.queue[#ns.Transport.queue]
+	check(last.verb == "send" and last.args[2]:find("^Best bag%?") ~= nil and ns.Transport:Flags():find("k", 1, true) ~= nil, "/ai: asks, and keeps the conversation coming until the answer")
+	table.remove(ns.Transport.queue)
+	local printed = #Stub.printed
+	copy = {}
+	for k, v in pairs(data) do copy[k] = v end
+	copy.askv = { id = data.threads[1].id, msgs = { { r = "u", t = "Which helm?" }, { r = "a", t = "The Crown." }, { r = "u", t = "Best bag?", at = time() }, { r = "a", t = "The Traveler's Pack." } } }
+	ns.Store:Apply(copy)
+	local said
+	for i = printed + 1, #Stub.printed do if Stub.printed[i]:find("[WoW Assistant] whispers: The Traveler's Pack.", 1, true) then said = true end end
+	check(said and not ns.Transport:Flags():find("k", 1, true), "/ai: the answer arrives in chat as a whisper, then the bridge stops")
+	_G.Chattynator = nil
+	data.bridge.asst, data.bridge.orca = nil, nil
+	ns.AskPanel.echo, ns.AskPanel.awaiting = nil, nil
+	ns.Store:Apply(data)
+end
+
+-- Without Chattynator: a docked chat window called "WoW Assistant", made once and left
+-- empty; the addon draws the conversation and its box inside it, so nothing sits where
+-- the game's own chat box goes.
+do
+	local CT = ns.ChatTab
+	local savedViews = CT.views
+	CT.views = {}
+	CT.native = nil
+	ns.db.chatTabMade = nil
+	local made, quieted, gameLines = 0, 0, 0
+	local function NewChat()
+		local f = CreateFrame("ScrollingMessageFrame", "ChatFrame7", UIParent)
+		f.AddMessage = function() gameLines = gameLines + 1 end
+		f.RemoveAllMessageGroups = function() quieted = quieted + 1 end
+		f.RemoveAllChannels = function() end
+		return f
+	end
+	local open = {}
+	_G.FCF_GetChatWindowInfo = function(i) if open[i] then return "WoW Assistant", 14, 0, 0, 0, 1, true, false, 1 end end
+	_G.FCF_OpenNewWindow = function(name, noDefaults) made = made + 1 open[7] = true CT.made = NewChat() return CT.made end
+	data.bridge.orca = true
+	data.bridge.asst = data.threads[1].id
+	ns.Store:Apply(data)
+	local frame = CT:EnsureNative(false)
+	check(frame and made == 1 and quieted >= 1 and ns.db.chatTabMade, "Chat window: made once, with every other kind of message off")
+	local view = CT.views[1]
+	check(view and view:GetParent() == frame, "Chat window: the conversation is drawn inside it")
+	local box = view.Box
+	local inside
+	for _, pt in ipairs(box._points or {}) do if pt[1] == "BOTTOMLEFT" and (type(pt[2]) ~= "table" or pt[2] == view) then inside = true end end
+	check(inside, "Chat window: the ask box sits inside the tab, not where the game's chat box opens")
+	check(ns.Transport:Flags():find("k", 1, true) ~= nil, "Chat window: while it shows, the bridge sends the conversation")
+	local lines = {}
+	view.Messages.AddMessage = function(_, text) table.insert(lines, text) end
+	view.Messages.Clear = function() lines = {} end
+	local copy = {}
+	for k, v in pairs(data) do copy[k] = v end
+	copy.askv = { id = data.threads[1].id, msgs = { { r = "u", t = "Which helm?", at = 100 }, { r = "a", t = "The Crown.", at = 101 } } }
+	ns.Store:Apply(copy)
+	CT:Render(view, true)
+	check(lines[1] == "To [WoW Assistant]: Which helm?" and lines[2] == "[WoW Assistant] whispers: The Crown." and gameLines == 0, "Chat window: the conversation reads as whispers, and the game's window stays empty")
+	box:SetText("And gloves?")
+	box:GetScript("OnEnterPressed")(box)
+	local last = ns.Transport.queue[#ns.Transport.queue]
+	check(last.verb == "send" and last.args[2]:find("^And gloves%?") ~= nil, "Chat window: its box asks the assistant")
+	table.remove(ns.Transport.queue)
+	ns.AskPanel.echo = nil
+	-- Closed by the player: not made again on its own, only by /orca tab.
+	open[7] = nil
+	CT.native = nil
+	frame:Hide()
+	CT:EnsureNative(false)
+	check(made == 1 and CT.native == nil, "Chat window: once closed, it isn't made again on its own")
+	CT:EnsureNative(true)
+	check(made == 2 and CT.native ~= nil, "Chat window: /orca tab makes it again")
+	_G.FCF_GetChatWindowInfo, _G.FCF_OpenNewWindow = nil, nil
+	CT.native = nil
+	CT.views = savedViews
+	data.bridge.asst, data.bridge.orca = nil, nil
+	ns.Store:Apply(data)
+end
+
+-- A long conversation (more than the six messages the bridge sends): asking again
+-- mustn't show the question twice or stay "thinking" once answered. Long answers become
+-- one chat line per line, so the tab scrolls through them.
+do
+	local CT = ns.ChatTab
+	local savedViews = CT.views
+	CT.views = {}
+	data.bridge.orca = true
+	data.bridge.asst = data.threads[1].id
+	ns.Store:Apply(data)
+	CT:Install(CreateFrame("Frame", nil, UIParent))
+	local view = CT.views[1]
+	local lines = {}
+	view.Messages.AddMessage = function(_, text) table.insert(lines, text) end
+	view.Messages.Clear = function() lines = {} end
+	local now = time()
+	local function apply(msgs, act)
+		local copy = {}
+		for k, v in pairs(data) do copy[k] = v end
+		copy.askv = { id = data.threads[1].id, msgs = msgs, act = act }
+		ns.Store:Apply(copy)
+		CT:Render(view, true)
+	end
+	local older = {
+		{ r = "u", t = "Where am I right now?", at = now - 300 }, { r = "a", t = "Goldshire.", at = now - 299 },
+		{ r = "u", t = "Best bag?", at = now - 200 }, { r = "a", t = "Linen Bag.", at = now - 199 },
+		{ r = "u", t = "Who sells it?", at = now - 100 }, { r = "a", t = "Brog Hamfist.", at = now - 99 },
+	}
+	apply(older)
+	ns.AskPanel:Send("Where am I right now?")
+	table.remove(ns.Transport.queue)
+	local function count(text) local n = 0 for _, l in ipairs(lines) do if l:find(text, 1, true) then n = n + 1 end end return n end
+	CT:Render(view, true)
+	check(count("To [WoW Assistant]: Where am I right now?") == 2, "Long chat: the new question shows once beside the old one")
+	-- The bridge has it, then answers; its window has slid to the last six.
+	apply({ older[3], older[4], older[5], older[6], { r = "u", t = "Where am I right now?", at = now }, { r = "a", t = "Goldshire, by the inn.\n\n• The inn is east.\n• The road is west.", at = now + 2 } })
+	check(count("To [WoW Assistant]: Where am I right now?") == 1 and not lines[#lines]:find("thinking", 1, true), "Long chat: answered, the question isn't doubled and it isn't thinking")
+	check(ns.AskPanel.echo == nil, "Long chat: the question just sent is settled")
+	check(count("[WoW Assistant] whispers: Goldshire, by the inn.") == 1 and count("   • The inn is east.") == 1 and count("   • The road is west.") == 1, "Long chat: an answer's lines are separate chat lines")
+	CT.views = savedViews
+	data.bridge.orca, data.bridge.asst = nil, nil
+	ns.Store:Apply(data)
+end
+
+-- Colours, opacity, the assistant key binding, tracking toggles, and PR notices that
+-- don't repeat or come from old work.
+do
+	-- The assistant's lines and the player's are different colours.
+	local CT = ns.ChatTab
+	local savedViews = CT.views
+	CT.views = {}
+	local holder = CreateFrame("Frame", nil, UIParent)
+	data.bridge.orca = true
+	data.bridge.asst = data.threads[1].id
+	ns.Store:Apply(data)
+	CT:Install(holder)
+	local view = CT.views[1]
+	local colors = {}
+	view.Messages.AddMessage = function(_, text, r, g, b) table.insert(colors, { text = text, r = r, g = g, b = b }) end
+	view.Messages.Clear = function() colors = {} end
+	local copy = {}
+	for k, v in pairs(data) do copy[k] = v end
+	copy.askv = { id = data.threads[1].id, msgs = { { r = "u", t = "Hi", at = 1 }, { r = "a", t = "Hello", at = 2 } } }
+	ns.Store:Apply(copy)
+	CT:Render(view, true)
+	local mine, theirs = colors[1], colors[2]
+	check(mine and theirs and (mine.r ~= theirs.r or mine.g ~= theirs.g or mine.b ~= theirs.b), "Chat tab: the assistant's lines and yours are different colours")
+	-- The key binding focuses the box (a frame later, so the key isn't typed into it).
+	local focused
+	view.Box.SetFocus = function() focused = true end
+	Orca_Binding("assistant")
+	check(focused, "Key binding: puts the cursor in the assistant's box")
+	CT.views = savedViews
+
+	-- Opacity of the main window.
+	ns.db.settings.windowAlpha = 0.7
+	ns.Main:ApplyScale()
+	check(ns.Main.frame:GetAlpha() == 0.7, "Opacity: the window takes the setting")
+	ns.db.settings.windowAlpha = nil
+	ns.Main:ApplyScale()
+
+	-- Tracking: right-clicking an agent in the window's list stops and starts its workspace.
+	local t = data.threads[2]
+	check(not ns.Tracker:IsHidden(t.p), "Tracking: a workspace starts out tracked")
+	ns.Tracker:ToggleWorkspace(t.p)
+	check(ns.Tracker:IsHidden(t.p), "Tracking: toggling hides it")
+	ns.Tracker:ToggleWorkspace(t.p)
+	check(not ns.Tracker:IsHidden(t.p), "Tracking: toggling again tracks it again")
+
+	-- PR notices: "ready" once per PR, and nothing from agents idle for days.
+	for _, f in ipairs(ns.Toasts.frames) do f:Hide() end
+	ns.db.prReadySaid = nil
+	local function toasted()
+		for _, f in ipairs(ns.Toasts.frames) do if f:IsShown() then f:Hide() return true end end
+	end
+	local recent = { id = "pr-a", title = "Recent", p = data.threads[1].p, s = "open", u = time() - 3600, pr = { n = 901, s = "open", c = "success", ok = true } }
+	ns:Fire("PRTransition", recent, "prready")
+	check(toasted(), "PR notices: ready to merge, for recent work, is a notice")
+	ns:Fire("PRTransition", recent, "prready")
+	check(not toasted(), "PR notices: the same PR isn't announced ready again (a bridge restart)")
+	local old = { id = "pr-b", title = "Old", p = data.threads[1].p, s = "open", u = time() - 10 * 24 * 3600, pr = { n = 902, s = "open", c = "failure" } }
+	ns:Fire("PRTransition", old, "prfail")
+	check(not toasted(), "PR notices: nothing from an agent idle for days")
+	data.bridge.orca, data.bridge.asst = nil, nil
+	ns.Store:Apply(data)
+end
+
+-- Settings scroll; the window hides in combat and is see-through only while moving; the
+-- strip uses small squares unless the bridge can't read them; any agent can be pinned to
+-- a chat tab of its own.
+do
+	-- Settings: the options live in a scrolling area, opacity on a row of its own.
+	ns.Main:ShowPage("settings")
+	check(ns.Settings.scroll and ns.Settings.checks[1]:GetParent() == ns.Settings.content, "Settings: the options scroll")
+	check(ns.Settings.moving ~= nil and ns.Settings.alpha ~= nil, "Settings: opacity has its own row, with only-while-moving")
+	ns.Main:ShowPage("threads")
+
+	-- Combat hides the window, and it comes back after.
+	ns.Main:Open()
+	ns:Fire("Combat", true)
+	check(not ns.Main.frame:IsShown(), "Combat: the window hides when a fight starts")
+	ns:Fire("Combat", false)
+	check(ns.Main.frame:IsShown(), "Combat: it comes back after")
+
+	-- See-through only while moving.
+	ns.db.settings.windowAlpha, ns.db.settings.windowAlphaMoving = 0.6, true
+	ns.Main.moving = false
+	ns.Main:ApplyScale()
+	check(ns.Main.frame:GetAlpha() == 1, "Opacity: solid while standing still")
+	ns.Main.moving = true
+	ns.Main:ApplyScale()
+	check(ns.Main.frame:GetAlpha() == 0.6, "Opacity: see-through while moving")
+	ns.db.settings.windowAlpha, ns.db.settings.windowAlphaMoving, ns.Main.moving = nil, nil, nil
+	ns.Main:ApplyScale()
+
+	-- The strip: small squares, back to large if the bridge runs but never reads it.
+	local T = ns.Transport
+	check((ns.db.settings.stripCell or 2) == 2, "Strip: small squares by default")
+	local saved = { T.stripShown, T.showSince, T.bridgeNow }
+	T.stripShown, T.showSince, T.bridgeNow = true, GetTime() - 25, time()
+	T:FallBackToLargerCells(GetTime())
+	check(ns.db.settings.stripCell == 3, "Strip: back to large squares when the bridge can't read small ones")
+	ns.db.settings.stripCell = nil
+	T.stripShown, T.showSince, T.bridgeNow = saved[1], saved[2], saved[3]
+	T.stripShown, T.showSince, T.bridgeNow = true, GetTime() - 25, time() - 60
+	T:FallBackToLargerCells(GetTime())
+	check(ns.db.settings.stripCell == nil, "Strip: no change while the bridge itself is quiet")
+	T.stripShown, T.showSince, T.bridgeNow = saved[1], saved[2], saved[3]
+
+	-- Pinning an agent to a chat tab of its own.
+	local CT = ns.ChatTab
+	local savedViews = CT.views
+	CT.views = {}
+	local open, closed = {}, 0
+	_G.FCF_GetChatWindowInfo = function(i) return open[i] end
+	_G.FCF_OpenNewWindow = function(name) open[8] = name local f = CreateFrame("ScrollingMessageFrame", "ChatFrame8", UIParent) f.RemoveAllMessageGroups = function() end f.RemoveAllChannels = function() end return f end
+	_G.FCF_Close = function() closed = closed + 1 open[8] = nil end
+	data.bridge.orca = true
+	local t = data.threads[2]
+	t.ro = nil
+	ns.Store:Apply(data)
+	local options = ns.ThreadList:RowMenuOptions(t)
+	check(options[1].value == "pin", "Pin: an agent's right-click menu offers to pin it")
+	CT:Pin(t.id)
+	local view = CT.views[#CT.views]
+	check(CT:IsPinned(t.id) and view and view.threadId == t.id and open[8] ~= nil, "Pin: it gets a chat tab of its own")
+	local last = ns.Transport.queue[#ns.Transport.queue]
+	check(last.verb == "watch" and last.args[1] == t.id, "Pin: while its tab shows, the bridge is asked for its conversation")
+	table.remove(ns.Transport.queue)
+	local lines = {}
+	view.Messages.AddMessage = function(_, text) table.insert(lines, text) end
+	view.Messages.Clear = function() lines = {} end
+	local copy = {}
+	for k, v in pairs(data) do copy[k] = v end
+	copy.chats = { [t.id] = { msgs = { { r = "u", t = "Fix the build", at = 1 }, { r = "a", t = "Done: tests pass.", at = 2 } } } }
+	ns.Store:Apply(copy)
+	CT:Render(view, true)
+	check(lines[1] == "To [" .. view.label .. "]: Fix the build" and lines[2] == "[" .. view.label .. "] whispers: Done: tests pass.", "Pin: its conversation reads as whispers")
+	view.Box:SetText("Open a PR")
+	view.Box:GetScript("OnEnterPressed")(view.Box)
+	last = ns.Transport.queue[#ns.Transport.queue]
+	check(last.verb == "send" and last.args[1] == t.id and last.args[2] == "Open a PR", "Pin: its box replies to the agent")
+	table.remove(ns.Transport.queue)
+	check(ns.ThreadList:RowMenuOptions(t)[1].value == "unpin", "Pin: the menu then offers to unpin")
+	CT:Unpin(t.id)
+	last = ns.Transport.queue[#ns.Transport.queue]
+	check(not CT:IsPinned(t.id) and closed == 1 and last.verb == "watch" and (last.args[1] == nil or last.args[1] == ""), "Pin: unpinning closes its tab and stops the conversation")
+	table.remove(ns.Transport.queue)
+	_G.FCF_GetChatWindowInfo, _G.FCF_OpenNewWindow, _G.FCF_Close = nil, nil, nil
+	CT.views = savedViews
+	CT.lastWatch = nil
+	data.bridge.orca = nil
+	ns.Store:Apply(data)
+end
+
 -- The WoW Assistant stays quiet: no toast, chat line or sound when it answers, not in
 -- the tracker, not in the login summary. Its icon gets a mark instead.
 do

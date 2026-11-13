@@ -506,7 +506,8 @@ export class OrcaClient extends EventEmitter {
         try {
           next = { ...(await this.prMergeState(pr.url)), checks: pr.checksStatus, at: Date.now() };
         } catch (err) {
-          next = { ok: false, error: err.message, checks: pr.checksStatus, at: Date.now() };
+          // GitHub didn't answer: keep what it said last rather than flip to "not ready".
+          next = { ...(before || { ok: false }), error: err.message, checks: pr.checksStatus, at: Date.now() };
         }
         this.merges.set(pr.url, next);
         if (before?.ok !== next.ok) changed = true;

@@ -8,6 +8,7 @@ BINDING_NAME_ORCA_NEW = "Start a new agent"
 BINDING_NAME_ORCA_TALK = "Push to talk (dictation)"
 BINDING_NAME_ORCA_READ = "Read the latest reply aloud"
 BINDING_NAME_ORCA_HUSH = "Stop reading aloud"
+BINDING_NAME_ORCA_ASSISTANT = "WoW Assistant: open its chat tab and type"
 
 function Orca_Binding(action, keystate)
 	if action == "toggle" then
@@ -30,6 +31,8 @@ function Orca_Binding(action, keystate)
 		if id then ns.Speak(t and (t.last or t.title) or "", id, "last") end
 	elseif action == "hush" then
 		ns.Hush()
+	elseif action == "assistant" then
+		ns.ChatTab:Focus()
 	end
 end
 
@@ -116,6 +119,24 @@ SlashCmdList.ORCA = function(msg)
 	elseif cmd == "new" then
 		ns.Main:StartNewThread()
 		if rest ~= "" then ns.Main.composer:SetText(rest) end
+	elseif cmd == "pin" or cmd == "unpin" then
+		-- The agent open in the window, pinned to (or unpinned from) a chat tab.
+		if not ns.viewId then
+			ns.Print("Open an agent in the Orca window first.")
+		elseif cmd == "pin" then
+			ns.ChatTab:Pin(ns.viewId)
+		else
+			ns.ChatTab:Unpin(ns.viewId)
+		end
+	elseif cmd == "tab" then
+		-- The WoW Assistant's chat tab, made again if it was closed.
+		if Chattynator and Chattynator.API then
+			ns.Print("With Chattynator, add the WoW Assistant tab from its settings: General > Special tabs.")
+		elseif ns.ChatTab:EnsureNative(true) then
+			if FCF_SelectDockFrame then pcall(FCF_SelectDockFrame, ns.ChatTab.native) end
+		else
+			ns.Print("Couldn't make the chat tab right now (in combat?). Try again in a moment.")
+		end
 	elseif cmd == "ask" then
 		-- The Ask panel: opened, and the question sent when one is given.
 		ns.AskPanel:Open()
@@ -166,6 +187,7 @@ SlashCmdList.ORCA = function(msg)
 		ns.Print("/orca — open the window")
 		ns.Print("/orca new [text] — start a new agent")
 		ns.Print("/orca ask [question] — ask the WoW Assistant about the game")
+		ns.Print("/ai <question> — ask it from any chat box; /orca tab — its chat tab")
 		ns.Print("/orca report [what went wrong] — diagnostics + screenshot into the message box")
 		ns.Print("/orca shot — attach a screenshot to your next message")
 		ns.Print("/orca selftest | usage | settings | status | tracker | unlock | lock | hush | errors")

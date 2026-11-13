@@ -94,6 +94,8 @@ local DEFAULTS = {
 		quickReplies = true,
 		awaySummary = true,
 		askIcon = true,
+		chatTab = true,
+		hideInCombat = true,
 		prNotices = true,
 		collapsed = { snoozed = true, settled = true },
 		strip = true,

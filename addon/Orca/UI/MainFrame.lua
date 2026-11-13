@@ -814,7 +814,34 @@ function M:ApplyScale()
 	local pref = ns.db.settings.windowScale or "auto"
 	local scale = SCALES[pref] or ((ns.Gamepad and ns.Gamepad:IsActive()) and 1.15 or 1)
 	self.frame:SetScale(scale)
+	-- See-through always, or only while the character moves.
+	local s = ns.db.settings
+	local seeThrough = not s.windowAlphaMoving or M.moving
+	self.frame:SetAlpha(seeThrough and (s.windowAlpha or 1) or 1)
 end
+
+-- The character starting and stopping, for "see-through only while moving".
+local mover = CreateFrame("Frame")
+mover:RegisterEvent("PLAYER_STARTED_MOVING")
+mover:RegisterEvent("PLAYER_STOPPED_MOVING")
+mover:SetScript("OnEvent", function(_, event)
+	M.moving = event == "PLAYER_STARTED_MOVING"
+	if ns.db and ns.db.settings.windowAlphaMoving then M:ApplyScale() end
+end)
+
+-- Combat: the window steps out of the way, and comes back once it's over if combat is
+-- what hid it.
+ns:On("Combat", function(inCombat)
+	local f = M.frame
+	if not f or not ns.db.settings.hideInCombat then return end
+	if inCombat and f:IsShown() then
+		M.hiddenByCombat = true
+		f:Hide()
+	elseif not inCombat and M.hiddenByCombat then
+		M.hiddenByCombat = nil
+		f:Show()
+	end
+end)
 
 function M:ToggleDictation()
 	if self.dictating then

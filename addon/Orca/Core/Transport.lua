@@ -25,7 +25,10 @@ ns.Transport = T
 
 local SLOT_FMT = "Orca_S%03d"
 local SIG_FMT = "Interface\\AddOns\\Orca\\Signals\\%05d.wav"
-local CELL = 3 -- physical pixels per strip square
+-- Physical pixels per strip square. 2 keeps the strip small (the bridge reads squares of
+-- 2 to 8); if the bridge turns out not to read it at 2, the addon goes back to 3 by itself
+-- (see FallBackToLargerCells) and remembers that.
+local function Cell() return (ns.db and ns.db.settings.stripCell) or 2 end
 -- Physical pixels between the strip and the game's top-left corner, across and down.
 -- Desktops that round window corners (Windows 11 tools, compositors) cut into that
 -- corner and draw a border along its edges. Clear of a corner rounded by up to about
@@ -320,6 +323,18 @@ function T:Fits(verb, ...)
 	return #self:Hello() + 1 + #rec + HelloGrowth() <= Codec.MAX_PAYLOAD - Codec.SEAL_OVERHEAD
 end
 
+-- The strip at 2-pixel squares, shown for a while, and the bridge still publishing since
+-- (so it's running) without having read it: it can't read squares that small on this
+-- screen. Go back to 3 for good, and say so.
+function T:FallBackToLargerCells(now)
+	if Cell() ~= 2 or not self.stripShown or not self.showSince or now - self.showSince < 20 then return end
+	local shownAt = time() - (now - self.showSince)
+	if not self.bridgeNow or self.bridgeNow < shownAt + 5 then return end
+	ns.db.settings.stripCell = 3
+	ns.Print("The link strip is back to its larger size: the bridge couldn't read the small one on this screen.")
+	self:DrawStrip()
+end
+
 -- Queue a command for the bridge. Returns its id.
 function T:Send(verb, ...)
 	local db = ns.db
@@ -408,7 +423,7 @@ local function LayoutStrip()
 	s:SetScale(768 / (physH or 1080))
 	s:ClearAllPoints()
 	s:SetPoint("TOPLEFT", UIParent, "TOPLEFT", INSET, -INSET)
-	s:SetSize(Codec.CELLS_PER_ROW * CELL, Codec.MAX_ROWS * CELL)
+	s:SetSize(Codec.CELLS_PER_ROW * Cell(), Codec.MAX_ROWS * Cell())
 end
 
 function T:DrawStrip()
@@ -429,15 +444,20 @@ function T:DrawStrip()
 	local s = EnsureStrip()
 	LayoutStrip()
 	local perRow = Codec.CELLS_PER_ROW
+	local cell = Cell()
 	for i = 1, #values do
 		local t = cells[i]
 		if not t then
 			t = s:CreateTexture(nil, "OVERLAY")
-			t:SetSize(CELL, CELL)
-			t:SetPoint("TOPLEFT", s, "TOPLEFT", ((i - 1) % perRow) * CELL, -math.floor((i - 1) / perRow) * CELL)
 			t:SetSnapToPixelGrid(true)
 			t:SetTexelSnappingBias(0)
 			cells[i] = t
+		end
+		if t.cell ~= cell then
+			t.cell = cell
+			t:SetSize(cell, cell)
+			t:ClearAllPoints()
+			t:SetPoint("TOPLEFT", s, "TOPLEFT", ((i - 1) % perRow) * cell, -math.floor((i - 1) / perRow) * cell)
 		end
 		local r, g, b = Codec.CellColor(values[i])
 		t:SetColorTexture(r, g, b, 1)
@@ -507,6 +527,7 @@ function T:OnUpdate(elapsed)
 	-- snapshot inside re-syncs which signal to watch.
 	local now = GetTime()
 	local quiet = now - (self.lastLoadAt or 0)
+	self:FallBackToLargerCells(now)
 	if self.stripShown and self.showSince and now - self.showSince > 4 and quiet > 5 then
 		self:LoadNextSlot("resync")
 	elseif ns.windowOpen and quiet > 150 then

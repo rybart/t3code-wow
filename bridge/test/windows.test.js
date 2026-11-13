@@ -221,7 +221,11 @@ test('the helper places the strip where the addon draws it and the decoder looks
   const helper = fs.readFileSync(fileURLToPath(new URL('../src/windows-helper.cs', import.meta.url)), 'utf8');
   const addon = fs.readFileSync(fileURLToPath(new URL('../../addon/Orca/Core/Transport.lua', import.meta.url)), 'utf8');
   const [cell, perRow, rows, inset] = helper.match(/const int CELL = (\d+), CELLS_PER_ROW = (\d+), MAX_ROWS = (\d+), INSET = (\d+);/).slice(1).map(Number);
-  assert.deepEqual([cell, perRow, rows, inset], [Number(addon.match(/^local CELL = (\d+)/m)[1]), CELLS_PER_ROW, MAX_ROWS, Number(addon.match(/^local INSET = (\d+)/m)[1])]);
+  // The addon draws 2-pixel squares, or 3 when the bridge can't read small ones; the
+  // helper checks the area of the larger, which holds either.
+  const small = Number(addon.match(/settings\.stripCell\) or (\d+)/)[1]);
+  assert.ok(small <= cell && cell === 3, `helper cell ${cell} covers the addon's ${small} and its fallback 3`);
+  assert.deepEqual([perRow, rows, inset], [CELLS_PER_ROW, MAX_ROWS, Number(addon.match(/^local INSET = (\d+)/m)[1])]);
   assert.equal(inset, STRIP_INSET, 'where the decoder looks');
   const grabbed = StripCapture.stripPixels(4);
   assert.ok(inset + perRow * cell <= grabbed.width && inset + rows * cell <= grabbed.height, 'the whole strip is in what the bridge grabs');

@@ -14,4 +14,7 @@
 	<Binding name="ORCA_HUSH" category="ADDONS">
 		Orca_Binding("hush")
 	</Binding>
+	<Binding name="ORCA_ASSISTANT" category="ADDONS">
+		Orca_Binding("assistant")
+	</Binding>
 </Bindings>

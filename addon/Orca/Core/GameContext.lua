@@ -66,6 +66,12 @@ function C.HookLinks()
 			ask:Insert(link)
 			return
 		end
+		for _, view in ipairs(ns.ChatTab and ns.ChatTab.views or {}) do
+			if view.Box:IsVisible() and view.Box:HasFocus() then
+				view.Box:Insert(link)
+				return
+			end
+		end
 		local box = ns.Main and ns.Main.composer
 		if box and box:IsVisible() and box:HasFocus() then ns.Suggest:InsertAtCursor(link) end
 	end

@@ -233,6 +233,7 @@ test("while the Ask panel is open, updates carry the assistant's latest messages
   assert.equal(v.id, 'o1');
   assert.deepEqual(v.msgs.map((m) => m.r + m.t), ['um2', 'am3', 'um4', 'am5', 'um6', 'am7']);
   assert.equal(v.act, undefined);
+  b.stop();
 });
 
 // A fake `gh`: what GitHub says about a PR and the repository, and every command run.
@@ -291,4 +292,25 @@ test('merging checks again first, uses the repository default, and never overrid
   assert.ok(!gh2.calls.some((a) => a[1] === 'merge'));
   c.stop();
   d.stop();
+});
+
+test("pinned agents' tabs: watch sends their conversations until the tabs hide", async () => {
+  const { Bridge } = await import('../src/bridge.js');
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-'));
+  const b = new Bridge({ addonsDir: dir, config: { slots: 8 }, log: () => {}, stateDir: dir });
+  b.refreshView = () => {};
+  b.t3.threads.set('o2', { id: 'o2', status: 'ready', _orca: {} });
+  b.views.set('o2', { projection: { messages: [{ role: 'user', text: 'Fix it' }, { role: 'assistant', text: 'Fixed.' }], runs: [], turnItems: [] } });
+  b.client = { flags: '' };
+  assert.equal(b.chatsSection(), undefined);
+  await b.runCommand({ id: 1, verb: 'watch', args: ['o2,gone'] });
+  const chats = b.chatsSection();
+  assert.deepEqual(Object.keys(chats), ['o2'], 'only threads that exist');
+  assert.deepEqual(chats.o2.msgs.map((m) => m.r + m.t), ['uFix it', 'aFixed.']);
+  await b.runCommand({ id: 2, verb: 'watch', args: [] });
+  assert.equal(b.chatsSection(), undefined);
+  b.stop();
 });

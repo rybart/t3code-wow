@@ -20,8 +20,10 @@ local CHECKS = {
 	{ key = "dictateSend", label = "Send dictated messages right away" },
 	{ key = "quickReplies", label = "Show quick replies under finished agents", after = function() ns.Transcript:Refresh(true) end },
 	{ key = "gameMenu", label = "Add Orca to the game menu" },
+	{ key = "hideInCombat", label = "Hide the Orca window in combat (it comes back after)" },
 	{ key = "minimapButton", label = "Show the minimap button", after = function() ns.MinimapButton:Refresh() end },
 	{ key = "askIcon", label = "Show the WoW Assistant's floating Ask button", after = function() ns.AskPanel:RefreshIcon() end },
+	{ key = "chatTab", label = "Give the WoW Assistant a chat tab (/orca tab brings it back if closed)", after = function() if ns.db.settings.chatTab then ns.ChatTab:EnsureNative(true) end end },
 }
 
 local VOICES = {
@@ -33,14 +35,23 @@ local VOICES = {
 
 function S:Create(page)
 	self.page = page
-	local title = UI.Text(page, "GameFontNormalLarge")
+	-- The options scroll: there are more than fit, and they mustn't run into the
+	-- connection details on the right or the buttons along the bottom.
+	local scroll = CreateFrame("ScrollFrame", nil, page, "UIPanelScrollFrameTemplate")
+	scroll:SetPoint("TOPLEFT", page, "TOPLEFT", 0, -4)
+	scroll:SetPoint("BOTTOMRIGHT", page, "BOTTOMLEFT", 462, 84)
+	local content = CreateFrame("Frame", nil, scroll)
+	content:SetSize(436, 10)
+	scroll:SetScrollChild(content)
+	self.scroll, self.content = scroll, content
+	local title = UI.Text(content, "GameFontNormalLarge")
 	title:SetPoint("TOPLEFT", 20, -16)
 	title:SetText("Settings")
 
 	local y = -48
 	self.checks = {}
 	for _, c in ipairs(CHECKS) do
-		local cb = CreateFrame("CheckButton", nil, page, "UICheckButtonTemplate")
+		local cb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
 		cb:SetPoint("TOPLEFT", 16, y)
 		cb.Text:SetFontObject("GameFontHighlight")
 		cb.Text:SetText(c.label)
@@ -50,17 +61,17 @@ function S:Create(page)
 			if c.after then c.after() end
 		end)
 		cb.key = c.key
-		cb.Text:SetWidth(400)
+		cb.Text:SetWidth(390)
 		cb.Text:SetWordWrap(false)
 		if c.tip then UI.Tooltip(cb, c.label, c.tip) end
 		table.insert(self.checks, cb)
 		y = y - 28
 	end
 
-	local voiceLabel = UI.Text(page, "GameFontHighlight")
+	local voiceLabel = UI.Text(content, "GameFontHighlight")
 	voiceLabel:SetPoint("TOPLEFT", 22, y - 12)
-	voiceLabel:SetText("Voice for reading aloud")
-	local dd = UI.Dropdown(page, 240, function(value)
+	voiceLabel:SetText("Read-aloud voice")
+	local dd = UI.Dropdown(content, 170, function(value)
 		ns.db.settings.tts = value
 		ns.Transport:Touch()
 		S:Refresh()
@@ -70,16 +81,16 @@ function S:Create(page)
 	for _, v in ipairs(VOICES) do table.insert(options, { value = v[1], label = v[2] }) end
 	dd:SetOptions(options, ns.db.settings.tts)
 	self.voice = dd
-	local test = UI.Button(page, "Test voice", 110, function()
+	local test = UI.Button(content, "Test voice", 90, function()
 		ns.Speak("Hello from Orca. This is how replies will sound.", "", "test")
 	end)
 	test:SetPoint("LEFT", dd, "RIGHT", 10, 0)
 	y = y - 40
 
-	local sizeLabel = UI.Text(page, "GameFontHighlight")
+	local sizeLabel = UI.Text(content, "GameFontHighlight")
 	sizeLabel:SetPoint("TOPLEFT", 22, y - 12)
 	sizeLabel:SetText("Window size")
-	local size = UI.Dropdown(page, 240, function(value)
+	local size = UI.Dropdown(content, 240, function(value)
 		ns.db.settings.windowScale = value
 		ns.Main:ApplyScale()
 	end)
@@ -91,7 +102,37 @@ function S:Create(page)
 		{ value = "xlarge", label = "Extra large" },
 	}, ns.db.settings.windowScale or "auto")
 	self.size = size
+	local alphaLabel = UI.Text(content, "GameFontHighlight")
+	y = y - 40
+	alphaLabel:SetPoint("TOPLEFT", 22, y - 12)
+	alphaLabel:SetText("Window opacity")
+	local alpha = UI.Dropdown(content, 90, function(value)
+		ns.db.settings.windowAlpha = value
+		ns.Main:ApplyScale()
+	end)
+	alpha:SetPoint("LEFT", alphaLabel, "RIGHT", 12, 0)
+	alpha:SetOptions({
+		{ value = 1, label = "100%" },
+		{ value = 0.9, label = "90%" },
+		{ value = 0.8, label = "80%" },
+		{ value = 0.7, label = "70%" },
+		{ value = 0.6, label = "60%" },
+		{ value = 0.5, label = "50%" },
+	}, ns.db.settings.windowAlpha or 1)
+	UI.Tooltip(alpha, "Window opacity", "How see-through the Orca window is.")
+	self.alpha = alpha
+	local moving = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
+	moving:SetPoint("LEFT", alpha, "RIGHT", 12, 0)
+	moving.Text:SetFontObject("GameFontHighlight")
+	moving.Text:SetText("Only while moving")
+	moving:SetScript("OnClick", function(self)
+		ns.db.settings.windowAlphaMoving = self:GetChecked() and true or false
+		ns.Main:ApplyScale()
+	end)
+	UI.Tooltip(moving, "Only while moving", "The window is see-through only while your character moves, and solid while you stand still to read it.")
+	self.moving = moving
 	y = y - 48
+	content:SetHeight(-y + 8)
 
 	local infoTitle = UI.Text(page, "GameFontNormal")
 	infoTitle:SetPoint("TOPLEFT", 480, -16)
@@ -130,7 +171,7 @@ function S:Create(page)
 	local report = UI.Button(page, "Report a problem", 150, function() ns.Main:ShowPage("threads") ns.Main:Report() end)
 	report:SetPoint("LEFT", selftest, "RIGHT", 10, 0)
 	UI.Tooltip(report, "Report a problem", "Puts diagnostics in the message box and attaches a screenshot, for the agent you have open (or a new one).")
-	self.controls = { dd, size, test, reload, resetTracker, showHidden, selftest, report }
+	self.controls = { dd, size, alpha, test, reload, resetTracker, showHidden, selftest, report }
 end
 
 local SIGNAL_TEXT = {
@@ -151,6 +192,9 @@ function S:Refresh()
 	self.voice:Update()
 	self.size.value = ns.db.settings.windowScale or "auto"
 	self.size:Update()
+	self.alpha.value = ns.db.settings.windowAlpha or 1
+	self.alpha:Update()
+	self.moving:SetChecked(ns.db.settings.windowAlphaMoving and true or false)
 	local T = ns.Transport
 	local b = ns.Store.data.bridge or {}
 	local lines = {

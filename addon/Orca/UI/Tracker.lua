@@ -188,8 +188,25 @@ function K:HideWorkspace(projectId)
 	s.trackerHidden = s.trackerHidden or {}
 	s.trackerHidden[projectId] = ns.Store:ProjectName(projectId) or true
 	GameTooltip:Hide()
-	ns.Print("Not showing " .. ns.Color("white", ns.Store:ProjectName(projectId)) .. " in the tracker. Settings > Show hidden workspaces brings it back.")
+	ns.Print("Not showing " .. ns.Color("white", ns.Store:ProjectName(projectId)) .. " in the tracker. Right-click one of its agents in the Orca window to show it again.")
 	self:Refresh()
+end
+
+function K:IsHidden(projectId)
+	return projectId ~= nil and (ns.db.settings.trackerHidden or {})[projectId] ~= nil
+end
+
+-- From the window's list: stop or start showing a workspace in the tracker.
+function K:ToggleWorkspace(projectId)
+	if not projectId then return end
+	if self:IsHidden(projectId) then
+		ns.db.settings.trackerHidden[projectId] = nil
+		if next(ns.db.settings.trackerHidden) == nil then ns.db.settings.trackerHidden = nil end
+		ns.Print("Showing " .. ns.Color("white", ns.Store:ProjectName(projectId)) .. " in the tracker again.")
+		self:Refresh()
+	else
+		self:HideWorkspace(projectId)
+	end
 end
 
 function K:HiddenCount()
