@@ -33,6 +33,14 @@ export class Assistant {
     // An agent reads its instructions when its chat starts, so a chat started on older
     // ones is replaced by a fresh chat on the next Ask.
     this.version = createHash('sha256').update(this.text).digest('hex').slice(0, 12);
+    // Orca lists a chat only once it has a message: keep showing ours until then.
+    if (this.sessionId) this.orca.pin?.(this.sessionId, { title: ASSISTANT_NAME, path: this.dir });
+    this.orca.on?.('pin-lost', (sid) => {
+      if (sid !== this.persist.assistant?.sessionId) return;
+      delete this.persist.assistant;
+      this.save();
+      this.log(`the ${ASSISTANT_NAME} chat is gone from Orca; the next Ask starts a new one`);
+    });
   }
 
   get sessionId() {
@@ -92,6 +100,7 @@ export class Assistant {
     const { sessionId, threadId } = await this.orca.launchChat(this.dir, prompt);
     this.persist.assistant = { sessionId, version: this.version, startedAt: Date.now() };
     this.save();
+    this.orca.pin?.(sessionId, { title: ASSISTANT_NAME, path: this.dir });
     try {
       await this.orca.call(['chat', 'rename', '--session', sessionId, '--name', ASSISTANT_NAME]);
     } catch (err) {

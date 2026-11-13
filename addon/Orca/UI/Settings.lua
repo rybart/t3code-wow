@@ -21,6 +21,7 @@ local CHECKS = {
 	{ key = "quickReplies", label = "Show quick replies under finished agents", after = function() ns.Transcript:Refresh(true) end },
 	{ key = "gameMenu", label = "Add Orca to the game menu" },
 	{ key = "minimapButton", label = "Show the minimap button", after = function() ns.MinimapButton:Refresh() end },
+	{ key = "askIcon", label = "Show the WoW Assistant's floating Ask button", after = function() ns.AskPanel:RefreshIcon() end },
 }
 
 local VOICES = {
@@ -109,13 +110,27 @@ function S:Create(page)
 		ns.Tracker:Refresh(true)
 	end)
 	resetTracker:SetPoint("LEFT", reload, "RIGHT", 10, 0)
+	-- Workspaces right-clicked out of the tracker come back here.
+	local showHidden = UI.Button(page, "Show hidden workspaces", 180, function()
+		ns.Tracker:ShowAllWorkspaces()
+		S:Refresh()
+	end)
+	showHidden:SetPoint("BOTTOMLEFT", reload, "TOPLEFT", 0, 8)
+	UI.Tooltip(showHidden, "Show hidden workspaces", function()
+		local names = {}
+		for _, name in pairs(ns.db.settings.trackerHidden or {}) do table.insert(names, type(name) == "string" and name or "a workspace") end
+		if #names == 0 then return "No workspaces are hidden from the tracker. Right-click one there to hide it." end
+		table.sort(names)
+		return "Hidden from the tracker: " .. table.concat(names, ", ") .. ". Click to show them again."
+	end)
+	self.showHidden = showHidden
 	local selftest = UI.Button(page, "Run self-test", 130, function() ns.SelfTest() end)
 	selftest:SetPoint("LEFT", resetTracker, "RIGHT", 10, 0)
 	UI.Tooltip(selftest, "Run self-test", "Checks the link to your desktop step by step and prints what's wrong, if anything.")
 	local report = UI.Button(page, "Report a problem", 150, function() ns.Main:ShowPage("threads") ns.Main:Report() end)
 	report:SetPoint("LEFT", selftest, "RIGHT", 10, 0)
 	UI.Tooltip(report, "Report a problem", "Puts diagnostics in the message box and attaches a screenshot, for the agent you have open (or a new one).")
-	self.controls = { dd, size, test, reload, resetTracker, selftest, report }
+	self.controls = { dd, size, test, reload, resetTracker, showHidden, selftest, report }
 end
 
 local SIGNAL_TEXT = {
@@ -128,6 +143,9 @@ local SIGNAL_TEXT = {
 
 function S:Refresh()
 	if not self.page then return end
+	local hidden = ns.Tracker:HiddenCount()
+	self.showHidden:SetText(hidden > 0 and string.format("Show hidden workspaces (%d)", hidden) or "Show hidden workspaces")
+	self.showHidden:SetEnabled(hidden > 0)
 	for _, cb in ipairs(self.checks) do cb:SetChecked(ns.db.settings[cb.key] and true or false) end
 	self.voice.value = ns.db.settings.tts
 	self.voice:Update()

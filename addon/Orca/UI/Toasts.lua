@@ -45,6 +45,23 @@ local function CreateToast(i)
 	f.Text:SetMaxLines(4)
 	f.Text:SetWidth(TEXT_W)
 	f.Text:SetWordWrap(true)
+	-- Dismiss without opening anything: the X, or a right-click anywhere on the notice.
+	f.Close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+	f.Close:SetSize(24, 24)
+	f.Close:SetPoint("TOPRIGHT", -3, -3)
+	f.Close:SetScript("OnClick", function() f:Hide() end)
+	f:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+		GameTooltip:SetText("Click to open, right-click or X to dismiss", 1, 1, 1)
+		GameTooltip:Show()
+		if self.timer then self.timer:Cancel() end
+		self.fade:Stop()
+		self:SetAlpha(1)
+	end)
+	f:SetScript("OnLeave", function(self)
+		GameTooltip:Hide()
+		self.timer = C_Timer.NewTimer(3, function() if self:IsShown() then self.fade:Play() end end)
+	end)
 	f:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 	f:SetScript("OnClick", function(self, button)
 		if button == "LeftButton" and self.threadId then ns.Main:SelectThread(self.threadId, { show = true }) end
@@ -98,7 +115,7 @@ function N:Show(t, kind)
 	local headline = ({ input = ns.Color("orange", "Needs you"), plan = ns.Color("orange", "Plan ready"),
 		failed = ns.Color("red", "Failed"), open = ns.Color("green", "Finished"),
 		prfail = ns.Color("red", "PR checks failing"), prpass = ns.Color("green", "PR checks passed"),
-		merged = ns.Color("purple", "PR merged") })[kind] or ""
+		merged = ns.Color("purple", "PR merged"), prready = ns.Color("green", "PR ready to merge") })[kind] or ""
 	f.Title:SetText(t.title)
 	f.Text:SetText(headline .. ns.Color("grey", "  ·  " .. ns.Store:ProjectName(t.p)) .. (t.last and ("\n" .. t.last) or ""))
 	-- Grow the frame to fit the text (up to four lines of the reply).
@@ -119,7 +136,8 @@ N.held = {}
 local function Notify(t, kind, quietSound)
 	local s = ns.db.settings
 	if not quietSound then Sound(kind == "prfail" and "failed" or kind) end
-	local viewing = ns.windowOpen and ns.viewId == t.id
+	-- Already on screen: the open window's thread, or the assistant in the Ask panel.
+	local viewing = (ns.windowOpen and ns.viewId == t.id) or (ns.askOpen and ns.Store:IsAssistant(t.id))
 	if s.toasts and not viewing then N:Show(t, kind) end
 	-- Desktop voice is handled by the bridge (flag "r"); the game's voice here.
 	if s.autoRead and ns.SpeechEngine() == "game" and VERBS[kind] then
@@ -148,7 +166,7 @@ end)
 
 -- A workspace's pull request: checks failed or passed, or it merged. Shown on one of its
 -- agents, so clicking the notice opens that agent.
-local PR_VERBS = { prfail = "has failing checks", prpass = "passed its checks", merged = "was merged" }
+local PR_VERBS = { prfail = "has failing checks", prpass = "passed its checks", merged = "was merged", prready = "is ready to merge" }
 ns:On("PRTransition", function(t, kind)
 	if not ns.db.settings.prNotices then return end
 	ns.Print(string.format("PR #%s (%s) %s.", tostring(t.pr.n), ns.Store:ProjectName(t.p), PR_VERBS[kind]))

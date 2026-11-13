@@ -171,6 +171,16 @@ function M:CreateThreadsPage(page)
 	header.Text:SetWordWrap(false)
 	header.Action = UI.Button(header, "Settle", 96, function() M:HeaderAction() end)
 	header.Action:SetPoint("RIGHT", -4, 0)
+	-- With Orca: merge the workspace's PR when GitHub would without an override. The first
+	-- click asks for a second within a few seconds; the bridge checks again before merging.
+	header.Merge = UI.Button(header, "Merge PR", 100, function() M:MergeClick() end)
+	header.Merge:SetPoint("RIGHT", -4, 0)
+	header.Merge:Hide()
+	UI.Tooltip(header.Merge, "Merge PR", function()
+		local t = ns.Store:Thread(ns.viewId)
+		local n = t and t.pr and t.pr.n or "?"
+		return "GitHub says PR #" .. n .. " can merge with no override: checks pass, reviews are in, no conflicts. Click twice to merge it, with the repository's usual merge method."
+	end)
 	header.Archive = UI.Button(header, "Archive", 86, function()
 		if ns.viewId then
 			ns.Transport:Send("archive", ns.viewId)
@@ -483,6 +493,25 @@ function M:OpenAssistant(text)
 	self.pendingNew = id
 	self:Open()
 	ns.Print(text ~= "" and "Asking the WoW Assistant…" or "Starting the WoW Assistant…")
+end
+
+function M:MergeClick()
+	local t = ns.Store:Thread(ns.viewId)
+	if not (t and t.pr and t.pr.ok) then return end
+	if self.mergeArmed ~= t.id then
+		self.mergeArmed = t.id
+		C_Timer.After(4, function()
+			if M.mergeArmed == t.id then M.mergeArmed = nil M:Refresh() end
+		end)
+		self:Refresh()
+		return
+	end
+	self.mergeArmed = nil
+	if ns.Transport:Send("merge", t.id) then
+		ns.Print("Merging PR #" .. t.pr.n .. "…")
+		PlaySound(SOUNDKIT.IG_QUEST_LIST_COMPLETE or SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
+	end
+	self:Refresh()
 end
 
 function M:StartNewThread(projectId)
@@ -896,6 +925,7 @@ function M:Refresh()
 		f.Subtitle:SetText("New Agent")
 		header.Text:SetText(ns.Color("gold", "New agent in"))
 		header.Action:Hide()
+		header.Merge:Hide()
 		header.Archive:Hide()
 		header.Snooze:Hide()
 		header.Project:Show()
@@ -959,7 +989,11 @@ function M:Refresh()
 			header.Model:ClearAllPoints()
 			header.Model:SetPoint("RIGHT", withEffort and header.Effort or anchor, "LEFT", -4, 0)
 			local pickers = (withModel and header.Model:GetWidth() + 4 or 0) + (withEffort and header.Effort:GetWidth() + 4 or 0)
-			local buttons = subagent and 6 or ((t.s == "settled" or snoozable) and 200 or 110)
+			local mergeable = ns.Store:IsOrca() and t.pr and t.pr.ok and t.pr.s == "open"
+			header.Merge:SetShown(mergeable and true or false)
+			if not mergeable then M.mergeArmed = nil end
+			header.Merge:SetText(M.mergeArmed == t.id and ns.Color("orange", "Click to confirm") or "Merge PR")
+			local buttons = mergeable and 110 or (subagent and 6 or ((t.s == "settled" or snoozable) and 200 or 110))
 			header.Text:SetPoint("RIGHT", -buttons - pickers, 0)
 			local busy = ns.db.settings.steerFollowUps and "Steer the agent" or "Queue a follow-up"
 			if readOnly then
@@ -982,6 +1016,7 @@ function M:Refresh()
 				header.Text:SetText(ns.Color("grey", "Pick an agent on the left, or start a new one"))
 			end
 			header.Action:Hide()
+			header.Merge:Hide()
 			header.Archive:Hide()
 			header.Snooze:Hide()
 			header.Model:Hide()

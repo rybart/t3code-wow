@@ -73,7 +73,7 @@ end
 
 local function CreateLine(parent)
 	local b = CreateFrame("Button", nil, parent)
-	b:RegisterForClicks("LeftButtonUp")
+	b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 	b.Dot = b:CreateTexture(nil, "ARTWORK")
 	b.Dot:SetTexture("Interface\\Buttons\\WHITE8X8")
 	b.Dot:SetMask("Interface\\CharacterFrame\\TempPortraitAlphaMask")
@@ -98,7 +98,7 @@ local function CreateLine(parent)
 		GameTooltip:SetText(t.title, 1, 0.82, 0, 1, true)
 		GameTooltip:AddLine(ns.Store:ProjectName(t.p), 0.7, 0.7, 0.7)
 		if t.last then GameTooltip:AddLine(t.last, 1, 1, 1, true) end
-		GameTooltip:AddLine("Click to open", 0.5, 0.5, 0.5)
+		GameTooltip:AddLine("Click to open. Right-click to stop showing this workspace here.", 0.5, 0.5, 0.5, true)
 		GameTooltip:Show()
 	end)
 	b:SetScript("OnLeave", function(self)
@@ -109,6 +109,10 @@ local function CreateLine(parent)
 		local t = self.thread
 		if not t then
 			if self.action then self.action() end
+			return
+		end
+		if mouse == "RightButton" then
+			K:HideWorkspace(t.p)
 			return
 		end
 		ns.Main:SelectThread(t.id, { show = true })
@@ -176,6 +180,29 @@ function K:Create()
 	DefaultPoint(f)
 end
 
+-- Workspaces the player keeps out of the tracker (by project id). They still show in
+-- the window and still send notices.
+function K:HideWorkspace(projectId)
+	if not projectId then return end
+	local s = ns.db.settings
+	s.trackerHidden = s.trackerHidden or {}
+	s.trackerHidden[projectId] = ns.Store:ProjectName(projectId) or true
+	GameTooltip:Hide()
+	ns.Print("Not showing " .. ns.Color("white", ns.Store:ProjectName(projectId)) .. " in the tracker. Settings > Show hidden workspaces brings it back.")
+	self:Refresh()
+end
+
+function K:HiddenCount()
+	local n = 0
+	for _ in pairs(ns.db.settings.trackerHidden or {}) do n = n + 1 end
+	return n
+end
+
+function K:ShowAllWorkspaces()
+	ns.db.settings.trackerHidden = nil
+	self:Refresh()
+end
+
 function K:Refresh(resetPosition)
 	if not self.frame then return end
 	local f = self.frame
@@ -187,10 +214,13 @@ function K:Refresh(resetPosition)
 	end
 
 	local entries = {}
-	for _, t in ipairs(ns.Store:Active()) do table.insert(entries, t) end
+	local hidden = s.trackerHidden or {}
+	for _, t in ipairs(ns.Store:Active()) do
+		if not hidden[t.p or ""] then table.insert(entries, t) end
+	end
 	for _, t in ipairs(ns.Store.data.threads) do
 		if #entries >= MAX_LINES then break end
-		if (t.s == "open" or t.s == "failed") and t.un then table.insert(entries, t) end
+		if (t.s == "open" or t.s == "failed") and t.un and not hidden[t.p or ""] then table.insert(entries, t) end
 	end
 	local state = ns.Transport:BridgeState()
 	self.bridgeState = state

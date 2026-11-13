@@ -29,6 +29,21 @@ export const POLL_MS = 2000;
 export const CHECKED_ORCA = '1.4.256';
 export const NEEDED_CAPABILITIES = ['agent-session.structured.v1', 'agent-session.queued-messages.v2', 'agent-session.question-answers.v1'];
 const RUNTIME_CHECK_MS = 10 * 60 * 1000;
+// How often an open PR's mergeability is asked of GitHub (sooner when its checks change).
+const PR_CHECK_MS = 2 * 60 * 1000;
+// GitHub's merge states that need no override: required checks pass, reviews are in, no
+// conflicts. (UNSTABLE, BLOCKED, BEHIND, DIRTY and the rest don't count.)
+const MERGEABLE = new Set(['CLEAN', 'HAS_HOOKS']);
+
+// The `gh` command: GH_CLI, else the one on PATH, else Homebrew's.
+export function findGhCli(env = process.env) {
+  if (env.GH_CLI) return env.GH_CLI;
+  for (const dir of (env.PATH || '').split(path.delimiter)) {
+    if (dir && fs.existsSync(path.join(dir, 'gh'))) return path.join(dir, 'gh');
+  }
+  for (const p of ['/opt/homebrew/bin/gh', '/usr/local/bin/gh']) if (fs.existsSync(p)) return p;
+  return null;
+}
 const MAC_CLI = '/Applications/Orca.app/Contents/Resources/bin/orca';
 
 // The agents the game's model picker offers. Each is one "provider" with one model,
@@ -79,7 +94,7 @@ function toolItem(agent) {
 // One Orca agent as a T3 thread. Orca's four states map onto what threadStatus()
 // in t3.js reads: working runs, blocked and waiting need the player, done is open
 // (or failed or stopped, by its outcome).
-export function agentToThread(agent, worktree, ids) {
+export function agentToThread(agent, worktree, ids, merges = null) {
   const id = ids.thread(agent.paneKey);
   // Orca's top-level state stays "working" while anything the agent started still
   // runs, a background shell command included. The main agent's own state says
@@ -103,7 +118,7 @@ export function agentToThread(agent, worktree, ids) {
     status: 'ready',
     latestVisibleMessage: agent.lastAssistantMessage ? { role: 'assistant', text: agent.lastAssistantMessage } : undefined,
     // Orca's own copy of the agent, for the view and the commands.
-    _orca: { paneKey: agent.paneKey, sessionId: sessionIdOf(agent.paneKey), worktreeId: worktree.worktreeId, agent, pr: prOf(worktree), issue: issueOf(worktree) },
+    _orca: { paneKey: agent.paneKey, sessionId: sessionIdOf(agent.paneKey), worktreeId: worktree.worktreeId, agent, pr: prOf(worktree, merges?.get(worktree?.linkedPR?.url)), prUrl: worktree?.linkedPR?.url || null, issue: issueOf(worktree) },
   };
   if (agent.parentPaneKey) t.lineage = { parentThreadId: ids.thread(agent.parentPaneKey), relationshipToParent: 'subagent' };
   if (state === 'working') {
@@ -128,16 +143,20 @@ export function agentToThread(agent, worktree, ids) {
 }
 
 // The workspace's linked pull request, as the game shows it: number, state and checks.
-export function prOf(worktree) {
+// `merge`: what GitHub last said about merging it ({ ok }), when known.
+export function prOf(worktree, merge = null) {
   const pr = worktree?.linkedPR;
   if (!pr?.number) return null;
   const sum = pr.checksSummary || {};
+  const state = pr.isDraft ? 'draft' : pr.state || 'open';
   return {
     n: pr.number,
-    s: pr.isDraft ? 'draft' : pr.state || 'open',
+    s: state,
     c: pr.checksStatus || sum.state || 'none',
     f: sum.failed || undefined,
     t: sum.total || undefined,
+    // Ready to merge with no override.
+    ok: state === 'open' && merge?.ok ? true : undefined,
   };
 }
 
@@ -279,12 +298,24 @@ export function historyToProjection(page) {
 const notYet = (what) => Promise.reject(new Error(`${what} from the game isn't available with Orca yet. Use Orca for this.`));
 
 export class OrcaClient extends EventEmitter {
-  constructor({ log = () => {}, label = 'Orca', cli = findOrcaCli(), run = null, pollMs = POLL_MS, rpc = null, shotDir = SHOT_DIR } = {}) {
+  constructor({ log = () => {}, label = 'Orca', cli = findOrcaCli(), run = null, pollMs = POLL_MS, rpc = null, shotDir = SHOT_DIR, gh = findGhCli(), ghRun = null } = {}) {
     super();
     this.shotDir = shotDir;
     // Orca's runtime chat API, for chat agents.
     this.rpc = rpc || new OrcaRpc();
     this.apiWarning = null; // set when an Orca update may have broken the chat API
+    // Chats the bridge started and keeps showing even before Orca lists them: Orca leaves
+    // a chat out of `worktree ps` until it has a message. session id -> { title, path }
+    this.pinned = new Map();
+    this.lastWorktrees = [];
+    // What GitHub says about merging each open PR: url -> { ok, state, checks, at }.
+    this.merges = new Map();
+    // GitHub's CLI, for merge states and merging. Tests pass their own `ghRun`.
+    this.gh = gh;
+    this.ghRun = ghRun || ((args) => new Promise((resolve, reject) => {
+      if (!this.gh) return reject(new Error("Couldn't find the gh command, which merging needs. Install GitHub's CLI and sign in with gh auth login."));
+      execFile(this.gh, args, { timeout: 30000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => (err ? reject(new Error(firstLine(stderr, 300) || err.message)) : resolve(stdout)));
+    }));
     this.orcaVersion = null;
     this.lastRuntimeCheck = 0;
     this.fences = new Map(); // session id -> the runtime fence its last history page gave
@@ -421,10 +452,13 @@ export class OrcaClient extends EventEmitter {
       projects.set(p.id, p);
       for (const a of w.agents || []) {
         if (!a?.paneKey || a.activity?.listed === false) continue;
-        const t = agentToThread(a, w, this.ids);
+        const t = agentToThread(a, w, this.ids, this.merges);
         threads.set(t.id, t);
       }
     }
+    this.lastWorktrees = worktrees;
+    this.checkPRs(worktrees);
+    this.addPinned(threads, worktrees);
     const first = this.lastDigest === null;
     const prevThreads = this.threads;
     const prevProjects = JSON.stringify([...this.projects.values()].map((p) => [p.id, p.title]));
@@ -441,6 +475,107 @@ export class OrcaClient extends EventEmitter {
     }
     for (const id of prevThreads.keys()) if (!threads.has(id)) this.emit('change', { kind: 'removed', id });
     if (JSON.stringify([...projects.values()].map((p) => [p.id, p.title])) !== prevProjects) this.emit('change', { kind: 'project' });
+  }
+
+  // ---- pull requests -------------------------------------------------------
+
+  // What GitHub says about merging a PR now.
+  async prMergeState(url) {
+    const out = await this.ghRun(['pr', 'view', url, '--json', 'state,isDraft,mergeStateStatus']);
+    const pr = JSON.parse(out);
+    return { state: pr.mergeStateStatus, ok: pr.state === 'OPEN' && !pr.isDraft && MERGEABLE.has(pr.mergeStateStatus) };
+  }
+
+  // Ask GitHub about each open PR whose answer is old or whose checks changed, one at a
+  // time, and show any change.
+  checkPRs(worktrees) {
+    if (this.prBusy || !this.gh) return;
+    const due = [];
+    for (const w of worktrees) {
+      const pr = w.linkedPR;
+      if (!pr?.url || (pr.state && pr.state !== 'open')) continue;
+      const known = this.merges.get(pr.url);
+      if (!known || known.checks !== pr.checksStatus || Date.now() - known.at > PR_CHECK_MS) due.push(pr);
+    }
+    if (!due.length) return;
+    this.prBusy = (async () => {
+      let changed = false;
+      for (const pr of due) {
+        const before = this.merges.get(pr.url);
+        let next;
+        try {
+          next = { ...(await this.prMergeState(pr.url)), checks: pr.checksStatus, at: Date.now() };
+        } catch (err) {
+          next = { ok: false, error: err.message, checks: pr.checksStatus, at: Date.now() };
+        }
+        this.merges.set(pr.url, next);
+        if (before?.ok !== next.ok) changed = true;
+      }
+      return changed;
+    })()
+      .then((changed) => {
+        this.prBusy = null;
+        if (changed && !this.stopped) this.apply(this.lastWorktrees);
+      })
+      .catch(() => (this.prBusy = null));
+  }
+
+  // Merges a thread's PR, only when GitHub says it can go in without an override: it
+  // checks again right before, and never passes --admin. The repository's own default
+  // merge method is used.
+  async mergePR(threadId) {
+    const t = this.threads.get(threadId);
+    const url = t?._orca?.prUrl;
+    if (!url) throw new Error("That agent's workspace has no pull request.");
+    const now = await this.prMergeState(url);
+    if (!now.ok) throw new Error(`GitHub won't merge it without an override yet (${String(now.state || 'not ready').toLowerCase()}).`);
+    const repo = /github\.com\/([^/]+\/[^/]+)\/pull\//.exec(url)?.[1];
+    let method = '--merge';
+    if (repo) {
+      try {
+        const r = JSON.parse(await this.ghRun(['repo', 'view', repo, '--json', 'viewerDefaultMergeMethod,mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed']));
+        const allowed = { MERGE: r.mergeCommitAllowed, SQUASH: r.squashMergeAllowed, REBASE: r.rebaseMergeAllowed };
+        const pick = allowed[r.viewerDefaultMergeMethod] ? r.viewerDefaultMergeMethod : Object.keys(allowed).find((k) => allowed[k]);
+        if (pick) method = `--${pick.toLowerCase()}`;
+      } catch {}
+    }
+    await this.ghRun(['pr', 'merge', url, method]);
+    this.merges.set(url, { ok: false, state: 'MERGED', at: Date.now() });
+    this.pollSoon();
+    return { number: t._orca.pr?.n };
+  }
+
+  // An empty chat the bridge started, as a thread in its workspace, until Orca lists it.
+  addPinned(threads, worktrees) {
+    for (const [sid, pin] of this.pinned) {
+      const paneKey = paneKeyOf(sid);
+      const id = this.ids.thread(paneKey);
+      if (threads.has(id)) continue;
+      const w = worktrees.find((x) => x.path === pin.path || (pin.realPath && x.path === pin.realPath));
+      if (!w) continue;
+      const t = agentToThread({ paneKey, state: 'done', conversationName: pin.title, activity: { unread: false }, stateStartedAt: pin.at, updatedAt: pin.at }, w, this.ids, this.merges);
+      t._orca.pinned = true;
+      threads.set(id, t);
+    }
+  }
+
+  // Show a chat the bridge started even while it's empty. Returns its thread id.
+  pin(sessionId, { title, path: dir }) {
+    let realPath = null;
+    try {
+      realPath = fs.realpathSync(dir);
+    } catch {}
+    this.pinned.set(sessionId, { title, path: dir, realPath, at: Date.now() });
+    const id = this.ids.thread(paneKeyOf(sessionId));
+    if (!this.threads.has(id)) {
+      this.addPinned(this.threads, this.lastWorktrees);
+      if (this.threads.has(id)) this.emit('change', { kind: 'thread', id, thread: this.threads.get(id) });
+    }
+    return id;
+  }
+
+  unpin(sessionId) {
+    this.pinned.delete(sessionId);
   }
 
   // ---- reads ---------------------------------------------------------------
@@ -523,9 +658,17 @@ export class OrcaClient extends EventEmitter {
   // message to a busy agent waits for its turn to end.
   // attachments: what uploadImage returned, { path }.
   async sendMessage(threadId, text, mode = 'auto', attachments = []) {
-    const { sid, fence } = this.chat(threadId, 'Replying to');
+    const { t, sid, fence } = this.chat(threadId, 'Replying to');
     const images = attachments.map((a) => a.path).filter(Boolean);
-    await this.rpc.send(sid, text, { queue: mode !== 'steer', fence, images });
+    try {
+      await this.rpc.send(sid, text, { queue: mode !== 'steer', fence, images });
+    } catch (err) {
+      if (!t._orca.pinned) throw err;
+      this.unpin(sid);
+      this.emit('pin-lost', sid);
+      this.pollSoon();
+      throw new Error(`That chat is gone from Orca (${err.message}). Press Ask again to start a new one.`);
+    }
     this.pollSoon();
     return {};
   }

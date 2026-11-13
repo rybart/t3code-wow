@@ -534,6 +534,8 @@ export class Bridge {
       const wasQuiet = c.flags.includes('q');
       c.flags = hello.flags;
       this.markDirty('minor');
+      // The Ask panel just opened: load the assistant's conversation for it.
+      if (this.askOpen() && this.assistant?.threadId()) this.refreshView(this.assistant.threadId(), true);
       // Out of combat / a quiet instance: read the held announcement now.
       if (wasQuiet && !c.flags.includes('q') && this.deferredAnnounce) {
         const { thread, status } = this.deferredAnnounce;
@@ -638,6 +640,12 @@ export class Bridge {
           msg = a0 ? 'Asked the assistant' : null;
           this.results.push({ id: cmd.id, ok: true, open: id });
           if (!msg) ok = null;
+          break;
+        }
+        case 'merge': {
+          // merge <thread>: its workspace's PR, only if GitHub needs no override.
+          const res = await this.t3.mergePR(a0);
+          msg = `PR #${res.number} merged`;
           break;
         }
         case 'model':
@@ -832,7 +840,8 @@ export class Bridge {
         v.contentKey = [msgs.length, last?.text?.length, last?.updatedAt, pendingRequest(p)?.id, proposedPlan(p)?.length, (p.runs || []).filter((r) => r.status === 'queued').length].join('|');
         const prevSubs = v.subs;
         v.subs = (p.subagents || []).map((a) => a.status).join();
-        if (threadId === this.client?.view) this.markDirty(v.contentKey !== prevContent ? 'view' : 'minor');
+        const shown = threadId === this.client?.view || (this.askOpen() && threadId === this.assistant?.threadId());
+        if (shown) this.markDirty(v.contentKey !== prevContent ? 'view' : 'minor');
         else if (activityLabel(p) !== prevLabel || v.subs !== prevSubs) this.markDirty('minor');
         // An open subagent's status lives on its parent, so keep the parent loaded too.
         const up = this.t3.threads.get(threadId)?._from;
@@ -870,8 +879,9 @@ export class Bridge {
       const status = this.statusOf(t);
       const before = ev.prev ? this.statusOf(ev.prev) : this.prevStatus.get(t.id);
       this.prevStatus.set(t.id, status);
-      // The open thread, or the parent an open subagent takes its status from.
-      if (t.id === this.client?.view || t.id === this.t3.threads.get(this.client?.view)?._from?.key) this.refreshView(t.id);
+      // The open thread, the parent an open subagent takes its status from, or the
+      // assistant while the Ask panel shows it.
+      if ((this.askOpen() && t.id === this.assistant?.threadId()) || t.id === this.client?.view || t.id === this.t3.threads.get(this.client?.view)?._from?.key) this.refreshView(t.id);
       else if (ACTIVE.has(status)) this.refreshView(t.id);
       if (before !== status) {
         this.markDirty('important');
@@ -892,6 +902,30 @@ export class Bridge {
       }
       this.markDirty('important');
     }
+  }
+
+  // The game's Ask panel is open (flag "k"): it shows the assistant's conversation.
+  askOpen() {
+    return Boolean(this.client?.flags?.includes('k'));
+  }
+
+  // The assistant's latest exchanges for the Ask panel: the last few messages, what it's
+  // doing, and whether it's waiting on an answer only the full window can give.
+  askSection() {
+    const id = this.assistant?.threadId();
+    if (!id || !this.askOpen()) return undefined;
+    const t = this.t3.threads.get(id);
+    const p = this.views.get(id)?.projection;
+    if (!p) return { id, loading: true };
+    const msgs = (p.messages || []).filter((m) => (m.role === 'user' || m.role === 'assistant') && m.text?.trim()).slice(-6);
+    const s = t ? this.statusOf(t) : 'open';
+    return {
+      id,
+      msgs: msgs.map((m) => ({ r: m.role === 'user' ? 'u' : 'a', t: markdownToWow(m.text, { maxChars: m.role === 'assistant' ? 2500 : 600 }), at: sec(m.createdAt) })),
+      act: s === 'working' ? escapeWow(activityLabel(p) || 'Thinking') : undefined,
+      st: s === 'working' ? sec(t?.activityRunStartedAt) : undefined,
+      ask: s === 'input' ? true : undefined,
+    };
   }
 
   // Read finished replies aloud when the player asked for it (flag "r").
@@ -1056,6 +1090,7 @@ export class Bridge {
       older: t3.olderSettled || undefined,
       view,
       fam,
+      askv: this.askSection(),
       usage,
       dict: this.dictation,
       newShots: this.shots.get('new')?.length || undefined,
@@ -1194,8 +1229,10 @@ export class Bridge {
     const BATCH = 300; // let a burst of changes land in one update
     const c = this.client;
     const since = Date.now() - this.lastPublishAt;
-    const open = c?.flags.includes('o');
-    const attending = open && c.flags.includes('a');
+    // The Ask panel ("k") counts as an open window the player is watching.
+    const panel = Boolean(c?.flags.includes('k'));
+    const open = c?.flags.includes('o') || panel;
+    const attending = open && (c.flags.includes('a') || panel);
     const total = Math.min(this.bank.slots, c?.slotCount || this.bank.slots);
     const remaining = this.remainingSlots();
     const needAck = c && c.ackedSeq !== c.seq;

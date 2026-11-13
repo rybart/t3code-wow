@@ -288,6 +288,128 @@ do
 	ns.GameContext.hooked = nil
 end
 
+-- The Ask panel: a floating icon opens a small panel that asks the WoW Assistant and
+-- shows its latest answer; while it's open the hello says so ("k") and the bridge sends
+-- the assistant's last messages (`askv`).
+do
+	local P = ns.AskPanel
+	data.bridge.orca = true
+	data.bridge.asst = nil
+	ns.Store:Apply(data)
+	local icon = P:CreateIcon()
+	check(icon:IsShown() ~= false, "Ask panel: the floating icon shows with Orca")
+	P:Open()
+	check(P:IsOpen() and ns.askOpen and ns.Transport:Flags():find("k", 1, true) ~= nil, "Ask panel: opening it tells the bridge (flag k)")
+	check(P.frame.Text:GetText():find("Ask anything about the game", 1, true) ~= nil, "Ask panel: empty, it says what it can do")
+	local queued = #ns.Transport.queue
+	P.box:SetText("Why is my game dark?")
+	P:Send()
+	local last = ns.Transport.queue[#ns.Transport.queue]
+	check(#ns.Transport.queue == queued + 1 and last.verb == "assistant" and last.args[1]:find("^Why is my game dark%?\n\n%[Game context%]") ~= nil, "Ask panel: with no assistant yet, the question starts its chat")
+	check(P.box:GetText() == "" and P.frame.Text:GetText():find("You: |rWhy is my game dark?", 1, true) ~= nil, "Ask panel: the question shows at once and the box clears")
+	check(P.frame.Status:GetText():find("Thinking", 1, true) ~= nil, "Ask panel: it says it's thinking until the answer comes")
+	table.remove(ns.Transport.queue)
+	-- The bridge's copy arrives with the answer.
+	local copy = {}
+	for k, v in pairs(data) do copy[k] = v end
+	copy.bridge = {}
+	for k, v in pairs(data.bridge) do copy.bridge[k] = v end
+	copy.bridge.asst = data.threads[1].id
+	copy.askv = { id = data.threads[1].id, msgs = { { r = "u", t = "Why is my game dark?", at = time() }, { r = "a", t = "Raise |cffffffffBrightness|r to 60." } } }
+	ns.Store:Apply(copy)
+	local shown = P.frame.Text:GetText()
+	check(shown:find("Raise |cffffffffBrightness|r to 60.", 1, true) ~= nil and select(2, shown:gsub("Why is my game dark", "")) == 1, "Ask panel: the answer shows, and the question once")
+	check(P.frame.Status:GetText() == "", "Ask panel: done, no status")
+	P.box:SetText("And gamma?")
+	P:Send()
+	last = ns.Transport.queue[#ns.Transport.queue]
+	check(last.verb == "send" and last.args[1] == data.threads[1].id and last.args[2]:find("^And gamma%?") ~= nil, "Ask panel: later questions go to the assistant's chat")
+	table.remove(ns.Transport.queue)
+	-- Shift-click fills the panel's box while it has focus.
+	local savedUtil = ChatFrameUtil
+	_G.ChatFrameUtil = { InsertLink = function() return false end }
+	ns.GameContext.hooked = nil
+	ns.GameContext.HookLinks()
+	P.box:SetText("compare ")
+	P.box:SetFocus()
+	ChatFrameUtil.InsertLink("|Hitem:1::|h[Thing]|h")
+	check(P.box:GetText() == "compare |Hitem:1::|h[Thing]|h", "Ask panel: shift-clicking an item puts its link in the panel's box")
+	P.box:ClearFocus()
+	P.box:SetText("")
+	_G.ChatFrameUtil = savedUtil
+	ns.GameContext.hooked = nil
+	P:Close()
+	check(not ns.askOpen and not ns.Transport:Flags():find("k", 1, true), "Ask panel: closing it tells the bridge")
+	data.bridge.orca = nil
+	ns.Store:Apply(data)
+end
+
+-- Merging a PR GitHub would merge with no override: a header button that needs a second
+-- click; toasts with an X; workspaces right-clicked out of the tracker.
+do
+	data.bridge.orca = true
+	local view = ns.viewId
+	local row
+	for _, t in ipairs(data.threads) do if t.id == view then row = t end end
+	row.pr = { n = 31, s = "open", c = "success", ok = true }
+	ns.Store:Apply(data)
+	ns.Main:Open()
+	ns.Main:SelectThread(view)
+	ns.Main:Refresh()
+	local hdr = ns.Main.frame.Pages.threads.Right.Header
+	check(hdr.Merge:IsShown() and hdr.Merge:GetText() == "Merge PR", "Merge: a PR ready to merge shows the button")
+	check(ns.Store.PRText(row.pr):find("ready to merge", 1, true) ~= nil, "Merge: the row says ready to merge")
+	local queued = #ns.Transport.queue
+	-- The stub runs timers at once; hold back the few seconds the confirmation waits.
+	local realAfter = C_Timer.After
+	C_Timer.After = function() end
+	ns.Main:MergeClick()
+	check(#ns.Transport.queue == queued and hdr.Merge:GetText():find("Click to confirm", 1, true) ~= nil, "Merge: the first click only asks to confirm")
+	ns.Main:MergeClick()
+	C_Timer.After = realAfter
+	local last = ns.Transport.queue[#ns.Transport.queue]
+	check(last.verb == "merge" and last.args[1] == view, "Merge: the second click sends merge")
+	table.remove(ns.Transport.queue)
+	check(ns.Store.PRChange({ n = 31, s = "open", c = "success" }, { n = 31, s = "open", c = "success", ok = true }) == "prready", "Merge: becoming ready to merge is a notice")
+	row.pr.ok = nil
+	ns.Store:Apply(data)
+	ns.Main:Refresh()
+	check(not hdr.Merge:IsShown(), "Merge: not ready, no button")
+	row.pr = nil
+
+	-- Toasts: the X dismisses without opening the window.
+	ns.Toasts:Show(data.threads[1], "open")
+	local toast = ns.Toasts.frames[1]
+	local wasOpen = ns.windowOpen
+	toast.Close:GetScript("OnClick")(toast.Close)
+	check(not toast:IsShown() and ns.windowOpen == wasOpen, "Toasts: the X dismisses without opening anything")
+	ns.Toasts:Show(data.threads[1], "open")
+	toast:GetScript("OnClick")(toast, "RightButton")
+	check(not toast:IsShown(), "Toasts: a right-click dismisses too")
+
+	-- Tracker: right-clicking an entry hides its workspace there.
+	ns.db.settings.tracker = true
+	local t = data.threads[1]
+	local savedS, savedUn = t.s, t.un
+	t.s = "working"
+	ns.Store:Apply(data)
+	ns.Tracker:Refresh()
+	local function trackerHas(id)
+		for _, b in ipairs(ns.Tracker.frame.Lines or {}) do if b:IsShown() ~= false and b.thread and b.thread.id == id then return true end end
+	end
+	check(trackerHas(t.id), "Tracker: a working agent is listed")
+	local line
+	for _, b in ipairs(ns.Tracker.frame.Lines) do if b.thread and b.thread.id == t.id then line = b end end
+	line:GetScript("OnClick")(line, "RightButton")
+	check(not trackerHas(t.id) and ns.db.settings.trackerHidden[t.p], "Tracker: right-click hides its workspace")
+	check(ns.Tracker:HiddenCount() == 1, "Tracker: the hidden workspace is counted for Settings")
+	ns.Tracker:ShowAllWorkspaces()
+	check(trackerHas(t.id), "Tracker: Show hidden workspaces brings it back")
+	t.s, t.un = savedS, savedUn
+	data.bridge.orca = nil
+	ns.Store:Apply(data)
+end
+
 -- Pull requests: a row's PR in a few words, a notice when its checks fail or it merges,
 -- once per PR though several agents share it.
 do

@@ -258,6 +258,12 @@ export class Fleet extends EventEmitter {
     return env.client.setModel(id, instanceId, model, effort);
   }
 
+  mergePR(key) {
+    const { env, id } = this.split(key);
+    if (!env.client.mergePR) throw new Error('Merging from the game needs the bridge to be watching Orca.');
+    return env.client.mergePR(id);
+  }
+
   defaultModelFor(projectKey) {
     const { env, id } = this.split(projectKey);
     return env.client.defaultModelFor(id);

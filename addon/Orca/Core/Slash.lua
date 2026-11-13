@@ -117,7 +117,9 @@ SlashCmdList.ORCA = function(msg)
 		ns.Main:StartNewThread()
 		if rest ~= "" then ns.Main.composer:SetText(rest) end
 	elseif cmd == "ask" then
-		ns.Main:OpenAssistant(rest)
+		-- The Ask panel: opened, and the question sent when one is given.
+		ns.AskPanel:Open()
+		if rest ~= "" then ns.AskPanel:Send(rest) end
 	elseif cmd == "settings" or cmd == "options" then
 		ns.Main:Open()
 		ns.Main:ShowPage("settings")

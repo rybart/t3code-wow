@@ -344,6 +344,7 @@ function T:Flags()
 	if self.signals ~= "ok" then f = f .. "s" end
 	if ns.IsQuiet() then f = f .. "q" end
 	if self.attending then f = f .. "a" end
+	if ns.askOpen then f = f .. "k" end
 	return f
 end
 

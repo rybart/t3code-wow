@@ -93,6 +93,7 @@ local DEFAULTS = {
 		project = "all",
 		quickReplies = true,
 		awaySummary = true,
+		askIcon = true,
 		prNotices = true,
 		collapsed = { snoozed = true, settled = true },
 		strip = true,

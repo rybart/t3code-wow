@@ -160,7 +160,7 @@ test("the game's transcript shows a question without the game context the addon 
 test("a workspace's pull request and issue ride on its agents' rows", () => {
   const w = { ...wt, linkedPR: { number: 1721, state: 'open', checksStatus: 'failure', checksSummary: { total: 18, failed: 2 } }, linkedLinearIssue: 'J-326' };
   const t = agentToThread(agent({ state: 'done' }), w, ids);
-  assert.deepEqual(t._orca.pr, { n: 1721, s: 'open', c: 'failure', f: 2, t: 18 });
+  assert.deepEqual(t._orca.pr, { n: 1721, s: 'open', c: 'failure', f: 2, t: 18, ok: undefined });
   assert.equal(t._orca.issue, 'J-326');
   assert.equal(agentToThread(agent({ state: 'done' }), wt, ids)._orca.pr, null);
 });
@@ -187,4 +187,108 @@ test('an Orca update that drops a needed capability, or breaks reading a chat, s
   caps = caps.slice(1);
   await c.checkRuntime();
   assert.match(c.apiWarning, /no longer offers agent-session\.structured\.v1/);
+});
+
+test("a chat the bridge started shows while it's still empty, and a gone one is dropped", async () => {
+  const dir = '/tmp/WoW Assistant';
+  const worktrees = [{ worktreeId: 'folder::asst', repo: 'WoW Assistant', path: dir, agents: [] }];
+  const rpc = { send: async () => { throw new Error('Session not found'); } };
+  const c = new OrcaClient({ run: async () => JSON.stringify({ ok: true, result: { worktrees } }), rpc, pollMs: 60000 });
+  c.stopped = false;
+  c.lastRuntimeCheck = Date.now();
+  await c.poll();
+  c.pollSoon = () => {};
+  const id = c.pin(SID, { title: 'WoW Assistant', path: dir });
+  const t = c.threads.get(id);
+  assert.equal(t.title, 'WoW Assistant');
+  assert.equal(t._orca.sessionId, SID);
+  assert.equal(threadStatus(t), 'open');
+  await c.poll();
+  assert.ok(c.threads.has(id), 'still shown after the next poll');
+  let lost = null;
+  c.on('pin-lost', (sid) => (lost = sid));
+  await assert.rejects(c.sendMessage(id, 'hi'), /gone from Orca.*Press Ask again/);
+  assert.equal(lost, SID);
+  await c.poll();
+  c.stop();
+  assert.ok(!c.threads.has(id), 'not shown once it turned out to be gone');
+});
+
+test("while the Ask panel is open, updates carry the assistant's latest messages", async () => {
+  const { Bridge } = await import('../src/bridge.js');
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'askv-'));
+  const b = new Bridge({ addonsDir: dir, config: { slots: 8 }, log: () => {}, stateDir: dir });
+  b.assistant.threadId = () => 'o1';
+  b.t3.threads.set('o1', { id: 'o1', status: 'ready', _orca: {} });
+  const messages = [];
+  for (let i = 0; i < 8; i++) messages.push({ role: i % 2 ? 'assistant' : 'user', text: `m${i}`, createdAt: new Date(1000 * i).toISOString() });
+  b.views.set('o1', { projection: { messages, runs: [], turnItems: [] } });
+  b.client = { flags: 'o' };
+  assert.equal(b.askSection(), undefined, 'not while the panel is closed');
+  b.client = { flags: 'k' };
+  const v = b.askSection();
+  assert.equal(v.id, 'o1');
+  assert.deepEqual(v.msgs.map((m) => m.r + m.t), ['um2', 'am3', 'um4', 'am5', 'um6', 'am7']);
+  assert.equal(v.act, undefined);
+});
+
+// A fake `gh`: what GitHub says about a PR and the repository, and every command run.
+function fakeGh({ status = 'CLEAN', state = 'OPEN', draft = false, method = 'MERGE', allowed = { mergeCommitAllowed: true, squashMergeAllowed: false, rebaseMergeAllowed: false } } = {}) {
+  const calls = [];
+  const gh = {
+    calls,
+    status,
+    run: async (args) => {
+      calls.push(args);
+      if (args[0] === 'pr' && args[1] === 'view') return JSON.stringify({ state, isDraft: draft, mergeStateStatus: gh.status });
+      if (args[0] === 'repo') return JSON.stringify({ viewerDefaultMergeMethod: method, ...allowed });
+      if (args[0] === 'pr' && args[1] === 'merge') return 'merged';
+      throw new Error(`unexpected gh ${args.join(' ')}`);
+    },
+  };
+  return gh;
+}
+
+const PR_URL = 'https://github.com/acme/app/pull/31';
+async function clientWithPR(gh) {
+  const worktrees = [{ ...wt, linkedPR: { number: 31, state: 'open', url: PR_URL, checksStatus: 'success' }, agents: [agent({ state: 'done' })] }];
+  const c = new OrcaClient({ run: async () => JSON.stringify({ ok: true, result: { worktrees } }), gh: 'gh', ghRun: gh.run, pollMs: 60000 });
+  c.stopped = false;
+  c.lastRuntimeCheck = Date.now();
+  c.pollSoon = () => {};
+  await c.poll();
+  await c.prBusy;
+  return c;
+}
+
+test('a PR GitHub calls CLEAN shows as ready to merge; anything else does not', async () => {
+  const c = await clientWithPR(fakeGh());
+  assert.equal([...c.threads.values()][0]._orca.pr.ok, true);
+  for (const status of ['BLOCKED', 'UNSTABLE', 'BEHIND', 'DIRTY']) {
+    const d = await clientWithPR(fakeGh({ status }));
+    assert.equal([...d.threads.values()][0]._orca.pr.ok, undefined, status);
+  }
+  c.stop();
+});
+
+test('merging checks again first, uses the repository default, and never overrides', async () => {
+  const gh = fakeGh({ method: 'SQUASH', allowed: { mergeCommitAllowed: true, squashMergeAllowed: true, rebaseMergeAllowed: false } });
+  const c = await clientWithPR(gh);
+  const id = [...c.threads.keys()][0];
+  const res = await c.mergePR(id);
+  assert.equal(res.number, 31);
+  const merge = gh.calls.find((a) => a[1] === 'merge');
+  assert.deepEqual(merge, ['pr', 'merge', PR_URL, '--squash']);
+  assert.ok(!gh.calls.flat().includes('--admin'));
+  // GitHub changed its mind since the last check: no merge.
+  const gh2 = fakeGh();
+  const d = await clientWithPR(gh2);
+  gh2.status = 'BLOCKED';
+  await assert.rejects(d.mergePR([...d.threads.keys()][0]), /won't merge it without an override yet \(blocked\)/);
+  assert.ok(!gh2.calls.some((a) => a[1] === 'merge'));
+  c.stop();
+  d.stop();
 });

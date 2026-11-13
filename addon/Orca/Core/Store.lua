@@ -330,11 +330,12 @@ function Store:IsOrca()
 	return b and b.orca and true or false
 end
 
--- What changed on a pull request worth a notice: "merged", "prfail" (checks failing)
--- or "prpass" (checks passed after running). Nil for anything else, or a first sighting.
+-- What changed on a pull request worth a notice: "merged", "prready" (GitHub would
+-- merge it with no override), "prfail" (checks failing) or "prpass" (checks passed). Nil for anything else, or a first sighting.
 function Store.PRChange(old, new)
 	if type(old) ~= "table" or type(new) ~= "table" or old.n ~= new.n then return nil end
 	if new.s == "merged" and old.s ~= "merged" then return "merged" end
+	if new.ok and not old.ok then return "prready" end
 	if new.c ~= old.c then
 		if new.c == "failure" then return "prfail" end
 		if new.c == "success" then return "prpass" end
@@ -347,6 +348,7 @@ function Store.PRText(pr)
 	local label, color
 	if pr.s == "merged" then label, color = "merged", "purple"
 	elseif pr.s == "closed" then label, color = "closed", "grey"
+	elseif pr.ok then label, color = "ready to merge", "green"
 	elseif pr.c == "failure" then label, color = "failing", "red"
 	elseif pr.c == "pending" then label, color = "checks running", "grey"
 	elseif pr.c == "success" then label, color = (pr.s == "draft" and "draft, passing" or "passing"), "green"

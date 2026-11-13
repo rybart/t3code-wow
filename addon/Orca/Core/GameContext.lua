@@ -60,8 +60,14 @@ end
 function C.HookLinks()
 	if C.hooked then return end
 	local function insert(link)
+		if type(link) ~= "string" then return end
+		local ask = ns.AskPanel and ns.AskPanel.box
+		if ask and ask:IsVisible() and ask:HasFocus() then
+			ask:Insert(link)
+			return
+		end
 		local box = ns.Main and ns.Main.composer
-		if type(link) == "string" and box and box:IsVisible() and box:HasFocus() then ns.Suggest:InsertAtCursor(link) end
+		if box and box:IsVisible() and box:HasFocus() then ns.Suggest:InsertAtCursor(link) end
 	end
 	if ChatFrameUtil and type(ChatFrameUtil.InsertLink) == "function" then
 		hooksecurefunc(ChatFrameUtil, "InsertLink", ns.Safe(insert))
